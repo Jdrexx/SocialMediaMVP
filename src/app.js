@@ -37,7 +37,7 @@ export function createApp({ db, jwtSecret, config } = {}) {
     ok: true,
     features: ['auth', 'uploads', 'users', 'posts', 'notifications', 'search', 'moderation', 'messages'],
     email: { configured: email.enabled },
-    realtime: { transport: 'socket.io' },
+    realtime: { transport: 'socket.io', capabilities: ['messages', 'typing', 'video-call-signaling'] },
     production: runtimeConfig.isProduction
   }));
   registerFeatures(app, context);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '';
+const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 async function api(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -32,11 +33,20 @@ export default function Home() {
   const [results, setResults] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [chatUser, setChatUser] = useState('');
+  const [chatPeer, setChatPeer] = useState(null);
   const [chatBody, setChatBody] = useState('');
   const [messages, setMessages] = useState([]);
   const [typing, setTyping] = useState('');
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [callStatus, setCallStatus] = useState('Idle');
+  const [inCall, setInCall] = useState(false);
   const socketRef = useRef(null);
   const typingTimer = useRef(null);
+  const pcRef = useRef(null);
+  const pendingRecipientRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
 
   const signedIn = Boolean(user);
 
@@ -49,6 +59,89 @@ export default function Home() {
     if (!signedIn) return;
     const data = await api('/api/notifications');
     setNotifications(data.notifications || []);
+  }
+
+  async function startLocalMedia() {
+    if (localStreamRef.current) return localStreamRef.current;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localStreamRef.current = stream;
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    return stream;
+  }
+
+  function createPeerConnection(recipientId) {
+    pcRef.current?.close();
+    const pc = new RTCPeerConnection(rtcConfig);
+    pc.onicecandidate = (event) => {
+      if (event.candidate) socketRef.current?.emit('webrtc:ice-candidate', { recipientId, candidate: event.candidate });
+    };
+    pc.ontrack = (event) => {
+      if (remoteVideoRef.current && event.streams[0]) remoteVideoRef.current.srcObject = event.streams[0];
+    };
+    pc.onconnectionstatechange = () => setCallStatus(`Call ${pc.connectionState}`);
+    pcRef.current = pc;
+    return pc;
+  }
+
+  async function preparePeer(recipientId) {
+    const stream = await startLocalMedia();
+    const pc = createPeerConnection(recipientId);
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    setInCall(true);
+    return pc;
+  }
+
+  async function startVideoCall() {
+    if (!chatPeer?.id) {
+      setCallStatus('Open a message thread before starting a video call.');
+      return;
+    }
+    try {
+      setCallStatus(`Calling @${chatPeer.username}...`);
+      const ack = await new Promise((resolve) => socketRef.current?.emit('video:call', { recipientId: chatPeer.id }, resolve));
+      if (!ack?.ok) throw new Error(ack?.error || 'Could not start call');
+      const pc = await preparePeer(chatPeer.id);
+      pendingRecipientRef.current = chatPeer.id;
+      setCallStatus(`Waiting for @${chatPeer.username} to accept...`);
+    } catch (err) {
+      setCallStatus(err.message);
+      endVideoCall(false);
+    }
+  }
+
+  async function acceptVideoCall() {
+    if (!incomingCall) return;
+    try {
+      setChatUser(incomingCall.username);
+      setChatPeer(incomingCall);
+      setCallStatus(`Accepted @${incomingCall.username}. Connecting...`);
+      await preparePeer(incomingCall.id);
+      socketRef.current?.emit('video:accept', { recipientId: incomingCall.id });
+      setIncomingCall(null);
+    } catch (err) {
+      setCallStatus(err.message);
+    }
+  }
+
+  function rejectVideoCall() {
+    if (incomingCall?.id) socketRef.current?.emit('video:reject', { recipientId: incomingCall.id });
+    setIncomingCall(null);
+    setCallStatus('Call rejected');
+  }
+
+  function endVideoCall(notify = true) {
+    const recipientId = chatPeer?.id || incomingCall?.id;
+    if (notify && recipientId) socketRef.current?.emit('video:end', { recipientId });
+    pcRef.current?.close();
+    pcRef.current = null;
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    pendingRecipientRef.current = null;
+    setInCall(false);
+    setIncomingCall(null);
+    setCallStatus('Idle');
   }
 
   useEffect(() => {
@@ -69,7 +162,52 @@ export default function Home() {
     });
     socket.on('typing:start', ({ username }) => setTyping(`${username} is typing...`));
     socket.on('typing:stop', () => setTyping(''));
-    return () => socket.close();
+    socket.on('video:incoming', ({ caller }) => {
+      setIncomingCall(caller);
+      setCallStatus(`Incoming video call from @${caller.username}`);
+    });
+    socket.on('video:accepted', async ({ by }) => {
+      setCallStatus(`@${by.username} accepted. Connecting...`);
+      const recipientId = pendingRecipientRef.current || by.id;
+      if (pcRef.current && recipientId) {
+        const offer = await pcRef.current.createOffer();
+        await pcRef.current.setLocalDescription(offer);
+        socket.emit('webrtc:offer', { recipientId, description: pcRef.current.localDescription });
+      }
+    });
+    socket.on('video:rejected', ({ by }) => {
+      setCallStatus(`@${by.username} rejected the call`);
+      endVideoCall(false);
+    });
+    socket.on('video:ended', ({ by }) => {
+      setCallStatus(`Call ended by @${by.username}`);
+      endVideoCall(false);
+    });
+    socket.on('webrtc:offer', async ({ from, description }) => {
+      try {
+        setChatUser(from.username);
+        setChatPeer(from);
+        setCallStatus(`Connecting video call with @${from.username}...`);
+        const pc = await preparePeer(from.id);
+        await pc.setRemoteDescription(description);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('webrtc:answer', { recipientId: from.id, description: pc.localDescription });
+      } catch (err) {
+        setCallStatus(err.message);
+      }
+    });
+    socket.on('webrtc:answer', async ({ description }) => {
+      if (pcRef.current && description) await pcRef.current.setRemoteDescription(description);
+      setCallStatus('Video call connected');
+    });
+    socket.on('webrtc:ice-candidate', async ({ candidate }) => {
+      if (pcRef.current && candidate) await pcRef.current.addIceCandidate(candidate).catch(() => null);
+    });
+    return () => {
+      socket.close();
+      endVideoCall(false);
+    };
   }, [user, chatUser]);
 
   async function submitAuth(e) {
@@ -118,6 +256,7 @@ export default function Home() {
     if (!username) return;
     const data = await api(`/api/messages/${encodeURIComponent(username)}`);
     setChatUser(username);
+    setChatPeer(data.user);
     setMessages(data.messages || []);
   }
 
@@ -136,7 +275,7 @@ export default function Home() {
         <div>
           <p className="eyebrow">Next.js + Express social platform</p>
           <h1>Social Media MVP</h1>
-          <p>Post updates, upload media, message friends in real time, manage your profile, and moderate community reports.</p>
+          <p>Post updates, upload media, video chat, message friends in real time, manage your profile, and moderate community reports.</p>
         </div>
         {user ? <div className="profileCard"><Avatar user={user} size={64} /><strong>@{user.username}</strong><span>{unreadCount} unread notifications</span></div> : null}
       </section>
@@ -176,14 +315,20 @@ export default function Home() {
           <section className="card searchPanel">
             <h2>Search</h2>
             <form onSubmit={doSearch} className="inline"><input placeholder="Search users or posts" value={search} onChange={(e) => setSearch(e.target.value)} /><button>Go</button></form>
-            {results && <div className="miniList">{results.users?.map((u) => <button key={u.id} onClick={() => setChatUser(u.username)}>@{u.username}</button>)}{results.posts?.map((p) => <article key={p.id}>{p.body}</article>)}</div>}
+            {results && <div className="miniList">{results.users?.map((u) => <button key={u.id} onClick={() => { setChatUser(u.username); setChatPeer(u); }}>@{u.username}</button>)}{results.posts?.map((p) => <article key={p.id}>{p.body}</article>)}</div>}
           </section>
 
           <section className="card chatPanel">
-            <h2>Messages</h2>
+            <h2>Messages + Video</h2>
             <form onSubmit={(e) => { e.preventDefault(); openThread(); }} className="inline"><input placeholder="Username" value={chatUser} onChange={(e) => setChatUser(e.target.value)} /><button>Open</button></form>
             <div className="messages">{messages.map((m) => <p key={m.id} className={m.sender_id === user.id ? 'mine' : ''}><b>{m.sender_username}:</b> {m.body}</p>)}<span className="typing">{typing}</span></div>
-            {chatUser && <form onSubmit={sendMessage} className="inline"><input placeholder="Message" value={chatBody} onChange={(e) => { setChatBody(e.target.value); socketRef.current?.emit('typing:start', { recipientId: messages.find((m) => m.sender_username === chatUser || m.recipient_username === chatUser)?.sender_id }); clearTimeout(typingTimer.current); typingTimer.current = setTimeout(() => socketRef.current?.emit('typing:stop', {}), 900); }} /><button>Send</button></form>}
+            {chatUser && <form onSubmit={sendMessage} className="inline"><input placeholder="Message" value={chatBody} onChange={(e) => { setChatBody(e.target.value); socketRef.current?.emit('typing:start', { recipientId: chatPeer?.id }); clearTimeout(typingTimer.current); typingTimer.current = setTimeout(() => socketRef.current?.emit('typing:stop', { recipientId: chatPeer?.id }), 900); }} /><button>Send</button></form>}
+            <div className="videoCall">
+              <div className="videoGrid"><video ref={localVideoRef} autoPlay muted playsInline /><video ref={remoteVideoRef} autoPlay playsInline /></div>
+              {incomingCall && <div className="incomingCall"><strong>@{incomingCall.username} is calling</strong><button onClick={acceptVideoCall}>Accept</button><button className="danger" onClick={rejectVideoCall}>Reject</button></div>}
+              <p className="status">Video status: {callStatus}</p>
+              <div className="inline"><button type="button" onClick={startVideoCall} disabled={!chatPeer?.id || inCall}>Start video call</button><button type="button" className="danger" onClick={() => endVideoCall()} disabled={!inCall && !incomingCall}>End call</button></div>
+            </div>
           </section>
 
           <section className="card notifications">

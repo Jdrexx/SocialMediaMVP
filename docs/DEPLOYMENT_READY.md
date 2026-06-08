@@ -8,7 +8,7 @@ This project is now closer to a production deploy, but still keeps the MVP-frien
 - SMTP-backed email sending added with Nodemailer.
 - Password reset and email verification send real email when SMTP env vars are present.
 - Profile photos and cover images can be set from authenticated image uploads.
-- Socket.IO realtime server added for chat message delivery and typing indicators.
+- Socket.IO realtime server added for chat message delivery, typing indicators, and WebRTC video-call signaling.
 - Production config validation added in `src/lib/env.js`.
 - Auth hardening added: strong production `JWT_SECRET`, secure cookies in production, `trust proxy`, disabled Express signature, tighter auth rate limits.
 - Tests added for profile images and production config guards.
@@ -86,6 +86,10 @@ Recommended next migration:
 ## Upload storage note
 
 Uploads currently go to `public/uploads`. This is acceptable for a single-instance MVP with persistent disk. For production, move media to object storage such as Cloudflare R2, S3, or UploadThing.
+
+## Video chat note
+
+Video chat uses WebRTC peer-to-peer media and Socket.IO for signaling. It includes a public STUN server for local/MVP testing. For production reliability, add a TURN service such as Twilio Network Traversal, Xirsys, Metered, or a self-hosted coturn server, then extend the `rtcConfig` in `app/page.jsx`.
 
 ## Verification commands
 

@@ -21,6 +21,7 @@ A working full-stack social media platform MVP built to be easy to upgrade and d
 - Report posts
 - Admin/moderation dashboard APIs
 - Real-time chat delivery with Socket.IO
+- WebRTC video chat between users using Socket.IO signaling
 - Typing indicators over WebSockets
 - SSE compatibility endpoint for older realtime clients
 - Authenticated personal feed plus public feed
@@ -194,5 +195,5 @@ Then:
 - If SMTP is configured, password reset and verification links are sent by email.
 - If SMTP is not configured, the API returns `dev_token` for local development only.
 - The first registered user becomes an admin.
-- Socket.IO now powers realtime message delivery and typing events.
+- Socket.IO now powers realtime message delivery, typing events, and WebRTC video-call signaling.
 - Local uploads and SQLite are fine for MVP demos; production should use persistent storage/backups, and a managed database migration when usage grows.

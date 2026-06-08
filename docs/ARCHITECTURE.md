@@ -79,7 +79,8 @@ Add more shared dependencies to `context` only when needed.
 | Search | `src/features/search/routes.js` | User and post search |
 | Moderation | `src/features/moderation/routes.js` | Reports, admin reports/users/post hiding/user suspension |
 | Messages | `src/features/messages/routes.js` | Threads, direct messages, SSE compatibility stream, Socket.IO message emits |
-| Frontend | `app/page.jsx` | Next.js dashboard UI for auth, profile media, posts, search, notifications, chat |
+| Video calls | `src/lib/realtime.js` + `app/page.jsx` | Authenticated Socket.IO signaling for call invite/accept/reject/end plus WebRTC offer/answer/ICE relay |
+| Frontend | `app/page.jsx` | Next.js dashboard UI for auth, profile media, posts, search, notifications, chat, and video calls |
 
 ## Production notes
 
@@ -89,4 +90,5 @@ Add more shared dependencies to `context` only when needed.
 - Uploads currently save to `public/uploads`; upgrade to S3/R2/UploadThing for larger production use.
 - SQLite is acceptable for a single-instance MVP with persistent disk. Multi-instance production should migrate to PostgreSQL and an ORM/query layer.
 - Socket.IO powers realtime chat and typing; add Redis adapter before multi-instance horizontal scaling.
+- WebRTC handles peer-to-peer video/audio streams; Socket.IO only relays call signaling. Add TURN credentials for reliable production calls behind restrictive networks.
 - Admin is bootstrapped by making the first registered user an admin. Upgrade to explicit role management before public launch.
