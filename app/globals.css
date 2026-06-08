@@ -22,7 +22,7 @@ label { display: grid; gap: .5rem; color: var(--muted); font-size: .9rem; }
 
 .shell { width: min(1180px, calc(100% - 2rem)); margin: auto; padding: 2rem 0 4rem; }
 .hero { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end; padding: 2rem; border: 1px solid var(--line); border-radius: 2rem; background: rgba(15, 23, 42, .52); backdrop-filter: blur(18px); }
-.frontLinks { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.frontLinks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
 .frontLinks a { display: grid; gap: .25rem; min-height: 90px; padding: .9rem; text-decoration: none; border: 1px solid var(--line); border-radius: 1.2rem; background: rgba(15, 23, 42, .62); transition: transform .16s ease, border-color .16s ease, background .16s ease; }
 .frontLinks a:hover, .frontLinks a:focus-visible { transform: translateY(-2px); border-color: rgba(103, 232, 249, .5); background: rgba(30, 41, 59, .82); outline: none; }
 .frontLinks span { color: var(--muted); font-size: .82rem; line-height: 1.35; }
@@ -62,9 +62,16 @@ h2 { margin: 0 0 1rem; }
 .post { padding: 1rem; display: grid; gap: .8rem; }
 .post > div { display: flex; gap: .7rem; align-items: center; }
 .post img, .post video { max-height: 420px; border-radius: 1rem; border: 1px solid var(--line); }
+.infoPage { display: grid; gap: 1rem; }
+.backLink { width: fit-content; text-decoration: none; color: #67e8f9; font-weight: 800; }
+.infoCard { display: grid; gap: .75rem; }
+.infoCard p, .infoCard ol { margin: 0; color: var(--muted); line-height: 1.7; }
+.infoCard li + li { margin-top: .5rem; }
+.pricingGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.pricingGrid strong { font-size: 1.4rem; color: #67e8f9; }
 
 @media (max-width: 960px) {
-  .hero, .dashboard, .feed { grid-template-columns: 1fr; }
+  .hero, .dashboard, .feed, .pricingGrid { grid-template-columns: 1fr; }
   .frontLinks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profilePanel { position: static; }
   .composer { grid-column: auto; }

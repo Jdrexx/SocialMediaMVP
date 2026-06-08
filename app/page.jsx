@@ -6,13 +6,10 @@ import { io } from 'socket.io-client';
 const API = process.env.NEXT_PUBLIC_API_URL || '';
 const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const frontPageLinks = [
-  { href: '#feed', label: 'News Feed', description: 'Browse public posts' },
-  { href: '#profile', label: 'Profile', description: 'Avatar, cover, and bio' },
-  { href: '#create-post', label: 'Create Post', description: 'Share text and media' },
-  { href: '#search', label: 'Search', description: 'Find people and posts' },
-  { href: '#messages', label: 'Messages + Video', description: 'Chat and start calls' },
-  { href: '#notifications', label: 'Notifications', description: 'See new activity' },
-  { href: '/index.html', label: 'Legacy Dashboard', description: 'Open the original UI' }
+  { href: '/about-us', label: 'About Us', description: 'Learn who we are' },
+  { href: '/contact', label: 'Contact', description: 'Get in touch' },
+  { href: '/rules-of-conduct', label: 'Rules Of Conduct', description: 'Community guidelines' },
+  { href: '/pricing', label: 'Pricing', description: 'View plans and options' }
 ];
 
 async function api(path, options = {}) {
