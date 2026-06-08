@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Social MVP</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <nav>
+      <h1>Social MVP</h1>
+      <div><span id="current-user">Guest</span> <button id="logout" hidden>Log out</button></div>
+    </nav>
+    <main>
+      <aside>
+        <section id="auth-panel" class="card">
+          <h2>Join</h2>
+          <form id="register-form">
+            <input name="username" placeholder="Username" required minlength="3">
+            <input name="email" type="email" placeholder="Email" required>
+            <input name="password" type="password" placeholder="Password" required minlength="8">
+            <button>Create account</button>
+          </form>
+          <h2>Log in</h2>
+          <form id="login-form">
+            <input name="email" type="email" placeholder="Email" required>
+            <input name="password" type="password" placeholder="Password" required>
+            <button>Log in</button>
+          </form>
+        </section>
+
+        <section id="profile-panel" class="card" hidden>
+          <h2>Profile</h2>
+          <form id="profile-form">
+            <textarea id="bio" name="bio" placeholder="Bio" maxlength="240"></textarea>
+            <input id="avatar_url" name="avatar_url" placeholder="Avatar image URL">
+            <button>Save profile</button>
+          </form>
+        </section>
+      </aside>
+
+      <section class="timeline">
+        <div id="message" class="message"></div>
+        <section id="composer" class="card" hidden>
+          <h2>Create post</h2>
+          <form id="post-form">
+            <textarea name="body" placeholder="What's happening?" maxlength="500" required></textarea>
+            <input name="image_url" placeholder="Optional image URL">
+            <button>Post</button>
+          </form>
+        </section>
+        <div class="feed-head">
+          <h2 id="view-title">Public feed</h2>
+          <div>
+            <button id="show-feed">Show feed</button>
+            <button id="follow-target" hidden></button>
+          </div>
+        </div>
+        <section id="feed"></section>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+node_modules/
+social.sqlite
+social.sqlite-*
+.env
+.DS_Store
