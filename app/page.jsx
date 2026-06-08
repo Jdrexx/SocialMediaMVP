@@ -5,6 +5,15 @@ import { io } from 'socket.io-client';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '';
 const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const frontPageLinks = [
+  { href: '#feed', label: 'News Feed', description: 'Browse public posts' },
+  { href: '#profile', label: 'Profile', description: 'Avatar, cover, and bio' },
+  { href: '#create-post', label: 'Create Post', description: 'Share text and media' },
+  { href: '#search', label: 'Search', description: 'Find people and posts' },
+  { href: '#messages', label: 'Messages + Video', description: 'Chat and start calls' },
+  { href: '#notifications', label: 'Notifications', description: 'See new activity' },
+  { href: '/index.html', label: 'Legacy Dashboard', description: 'Open the original UI' }
+];
 
 async function api(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -280,6 +289,15 @@ export default function Home() {
         {user ? <div className="profileCard"><Avatar user={user} size={64} /><strong>@{user.username}</strong><span>{unreadCount} unread notifications</span></div> : null}
       </section>
 
+      <nav className="frontLinks" aria-label="Front page links">
+        {frontPageLinks.map((link) => (
+          <a key={link.href} href={link.href}>
+            <strong>{link.label}</strong>
+            <span>{link.description}</span>
+          </a>
+        ))}
+      </nav>
+
       {!signedIn ? (
         <section className="card authCard">
           <div className="tabs"><button onClick={() => setMode('login')} className={mode === 'login' ? 'active' : ''}>Login</button><button onClick={() => setMode('register')} className={mode === 'register' ? 'active' : ''}>Register</button></div>
@@ -293,7 +311,7 @@ export default function Home() {
         </section>
       ) : (
         <div className="dashboard">
-          <section className="card profilePanel">
+          <section id="profile" className="card profilePanel">
             <div className="cover">{user.cover_url && <img src={user.cover_url} alt="cover" />}</div>
             <Avatar user={user} size={72} />
             <h2>@{user.username}</h2>
@@ -302,7 +320,7 @@ export default function Home() {
             <label>Cover image<input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && setProfileImage('cover', e.target.files[0])} /></label>
           </section>
 
-          <section className="card composer">
+          <section id="create-post" className="card composer">
             <h2>Create post</h2>
             <form onSubmit={createPost}>
               <textarea placeholder="What's happening?" value={postBody} onChange={(e) => setPostBody(e.target.value)} />
@@ -312,13 +330,13 @@ export default function Home() {
             </form>
           </section>
 
-          <section className="card searchPanel">
+          <section id="search" className="card searchPanel">
             <h2>Search</h2>
             <form onSubmit={doSearch} className="inline"><input placeholder="Search users or posts" value={search} onChange={(e) => setSearch(e.target.value)} /><button>Go</button></form>
             {results && <div className="miniList">{results.users?.map((u) => <button key={u.id} onClick={() => { setChatUser(u.username); setChatPeer(u); }}>@{u.username}</button>)}{results.posts?.map((p) => <article key={p.id}>{p.body}</article>)}</div>}
           </section>
 
-          <section className="card chatPanel">
+          <section id="messages" className="card chatPanel">
             <h2>Messages + Video</h2>
             <form onSubmit={(e) => { e.preventDefault(); openThread(); }} className="inline"><input placeholder="Username" value={chatUser} onChange={(e) => setChatUser(e.target.value)} /><button>Open</button></form>
             <div className="messages">{messages.map((m) => <p key={m.id} className={m.sender_id === user.id ? 'mine' : ''}><b>{m.sender_username}:</b> {m.body}</p>)}<span className="typing">{typing}</span></div>
@@ -331,7 +349,7 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="card notifications">
+          <section id="notifications" className="card notifications">
             <h2>Notifications</h2>
             <button onClick={loadNotifications}>Refresh</button>
             {notifications.map((n) => <p key={n.id} className={!n.read_at ? 'unread' : ''}>{n.body}</p>)}
@@ -339,7 +357,7 @@ export default function Home() {
         </div>
       )}
 
-      <section className="feed">
+      <section id="feed" className="feed">
         {posts.map((post) => <article className="post" key={post.id}><div><Avatar user={{ username: post.username, avatar_url: post.avatar_url }} /><strong>@{post.username}</strong></div><p>{post.body}</p>{post.media_url && (post.media_type?.startsWith('video') ? <video src={post.media_url} controls /> : <img src={post.media_url} alt="post media" />)}</article>)}
       </section>
     </main>
