@@ -24,7 +24,7 @@ export function createApp({ db, jwtSecret, config } = {}) {
     contentSecurityPolicy: false
   }));
   app.use(express.json({ limit: '1mb' }));
-  app.use(express.static('public'));
+  app.use(express.static('public', { index: false }));
   app.use(cookieParser());
   app.use(morgan(runtimeConfig.isProduction ? 'combined' : 'dev'));
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: runtimeConfig.isProduction ? 30 : 100, standardHeaders: true, legacyHeaders: false }));

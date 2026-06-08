@@ -31,16 +31,25 @@ A working full-stack social media platform MVP built to be easy to upgrade and d
 
 ## Run locally
 
-Backend API/static legacy UI:
+Single-server mode, matching Railway production behavior:
 
 ```bash
 npm install
+npm run build
 npm start
 ```
 
 Open: http://localhost:3000
 
-Next.js frontend:
+Development mode with separate Next.js hot reload:
+
+Terminal 1:
+
+```bash
+npm start
+```
+
+Terminal 2:
 
 ```bash
 npm run frontend:dev
@@ -64,6 +73,31 @@ npm run frontend:build
 ```
 
 Current verification target: all API tests pass and the Next.js production build succeeds.
+
+## Railway deployment
+
+Railway config is included in:
+
+```text
+railway.json
+```
+
+Full Railway instructions are in:
+
+```text
+docs/RAILWAY_DEPLOYMENT.md
+```
+
+Minimum Railway variables:
+
+```env
+NODE_ENV=production
+JWT_SECRET=<64+ char random secret>
+PUBLIC_URL=https://<your-railway-domain>
+DB_FILE=/data/social.sqlite
+```
+
+Also attach a Railway volume mounted at `/data` so SQLite persists across redeploys.
 
 ## Environment variables
 
