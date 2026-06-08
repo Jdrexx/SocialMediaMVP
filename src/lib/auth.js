@@ -8,8 +8,14 @@ export function publicUser(user) {
     email: user.email,
     bio: user.bio,
     avatar_url: user.avatar_url,
+    email_verified: Boolean(user.email_verified),
+    is_admin: Boolean(user.is_admin),
     created_at: user.created_at
   };
+}
+
+export function createToken() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function signToken(user, secret) {

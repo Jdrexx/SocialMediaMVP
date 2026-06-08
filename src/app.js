@@ -22,7 +22,7 @@ export function createApp({ db, jwtSecret = process.env.JWT_SECRET || 'dev-secre
     next();
   });
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, features: ['auth', 'users', 'posts'] }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, features: ['auth', 'uploads', 'users', 'posts', 'notifications', 'search', 'moderation', 'messages'] }));
   registerFeatures(app, context);
   app.use('/api/*', notFound);
 

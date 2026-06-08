@@ -27,6 +27,18 @@
             <input name="password" type="password" placeholder="Password" required>
             <button>Log in</button>
           </form>
+          <details>
+            <summary>Password reset</summary>
+            <form id="reset-request-form">
+              <input name="email" type="email" placeholder="Email" required>
+              <button>Get reset token</button>
+            </form>
+            <form id="reset-confirm-form">
+              <input name="token" placeholder="Reset token" required>
+              <input name="password" type="password" placeholder="New password" required minlength="8">
+              <button>Reset password</button>
+            </form>
+          </details>
         </section>
 
         <section id="profile-panel" class="card" hidden>
@@ -36,6 +48,44 @@
             <input id="avatar_url" name="avatar_url" placeholder="Avatar image URL">
             <button>Save profile</button>
           </form>
+          <form id="verify-request-form">
+            <button>Get email verification token</button>
+          </form>
+          <form id="verify-confirm-form">
+            <input name="token" placeholder="Verification token">
+            <button>Verify email</button>
+          </form>
+        </section>
+
+        <section id="search-panel" class="card">
+          <h2>Search</h2>
+          <form id="search-form">
+            <input name="q" placeholder="Search users/posts" minlength="2">
+            <button>Search</button>
+          </form>
+          <div id="search-results"></div>
+        </section>
+
+        <section id="notifications-panel" class="card" hidden>
+          <h2>Notifications</h2>
+          <button id="mark-all-read">Mark all read</button>
+          <div id="notifications"></div>
+        </section>
+
+        <section id="messages-panel" class="card" hidden>
+          <h2>Messages</h2>
+          <form id="message-form">
+            <input name="username" placeholder="Recipient username" required>
+            <textarea name="body" placeholder="Message" required></textarea>
+            <button>Send message</button>
+          </form>
+          <div id="threads"></div>
+        </section>
+
+        <section id="admin-panel" class="card" hidden>
+          <h2>Admin moderation</h2>
+          <button id="load-admin">Load reports</button>
+          <div id="admin-reports"></div>
         </section>
       </aside>
 
@@ -45,7 +95,8 @@
           <h2>Create post</h2>
           <form id="post-form">
             <textarea name="body" placeholder="What's happening?" maxlength="500" required></textarea>
-            <input name="image_url" placeholder="Optional image URL">
+            <input id="media-upload" name="media" type="file" accept="image/*,video/*">
+            <input name="image_url" placeholder="Optional fallback image URL">
             <button>Post</button>
           </form>
         </section>

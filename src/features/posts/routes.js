@@ -1,5 +1,6 @@
 import express from 'express';
 import { authRequired } from '../../lib/http.js';
+import { createNotification } from '../../lib/notifications.js';
 import { getPosts } from '../../lib/posts.js';
 import { commentSchema, postSchema } from '../../lib/schemas.js';
 
@@ -10,7 +11,7 @@ export function createPostsRouter({ db }) {
     const posts = getPosts(
       db,
       req.user.id,
-      'WHERE posts.user_id = ? OR posts.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?)',
+      'WHERE (posts.user_id = ? OR posts.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?))',
       [req.user.id, req.user.id]
     );
     res.json({ posts });
@@ -22,7 +23,13 @@ export function createPostsRouter({ db }) {
     const parsed = postSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-    const result = db.prepare('INSERT INTO posts (user_id, body, image_url) VALUES (?, ?, ?)').run(req.user.id, parsed.data.body, parsed.data.image_url || '');
+    let mediaId = parsed.data.media_id || null;
+    if (mediaId) {
+      const media = db.prepare('SELECT id FROM media WHERE id = ? AND user_id = ?').get(mediaId, req.user.id);
+      if (!media) return res.status(400).json({ error: 'Media not found' });
+    }
+
+    const result = db.prepare('INSERT INTO posts (user_id, body, image_url, media_id) VALUES (?, ?, ?, ?)').run(req.user.id, parsed.data.body, parsed.data.image_url || '', mediaId);
     const post = getPosts(db, req.user.id, 'WHERE posts.id = ?', [result.lastInsertRowid])[0];
     res.status(201).json({ post });
   });
@@ -37,7 +44,7 @@ export function createPostsRouter({ db }) {
   });
 
   router.post('/posts/:id/like', authRequired, (req, res) => {
-    const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(req.params.id);
+    const post = db.prepare('SELECT id, user_id FROM posts WHERE id = ?').get(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
 
     const existing = db.prepare('SELECT 1 FROM likes WHERE user_id = ? AND post_id = ?').get(req.user.id, post.id);
@@ -47,6 +54,7 @@ export function createPostsRouter({ db }) {
     }
 
     db.prepare('INSERT INTO likes (user_id, post_id) VALUES (?, ?)').run(req.user.id, post.id);
+    createNotification(db, { userId: post.user_id, actorId: req.user.id, type: 'like', entityType: 'post', entityId: post.id, body: `${req.user.username} liked your post` });
     res.json({ liked: true });
   });
 
@@ -54,7 +62,7 @@ export function createPostsRouter({ db }) {
     const parsed = commentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-    const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(req.params.id);
+    const post = db.prepare('SELECT id, user_id FROM posts WHERE id = ?').get(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
 
     const result = db.prepare('INSERT INTO comments (user_id, post_id, body) VALUES (?, ?, ?)').run(req.user.id, post.id, parsed.data.body);
@@ -64,6 +72,7 @@ export function createPostsRouter({ db }) {
       WHERE comments.id = ?
     `).get(result.lastInsertRowid);
 
+    createNotification(db, { userId: post.user_id, actorId: req.user.id, type: 'comment', entityType: 'post', entityId: post.id, body: `${req.user.username} commented: ${parsed.data.body}` });
     res.status(201).json({ comment });
   });
 

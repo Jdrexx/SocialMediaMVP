@@ -1,5 +1,7 @@
 node_modules/
 social.sqlite
 social.sqlite-*
+public/uploads/*
+!public/uploads/.gitkeep
 .env
 .DS_Store

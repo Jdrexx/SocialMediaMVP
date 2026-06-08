@@ -58,6 +58,18 @@ Add more shared dependencies to `context` only when needed.
 
 | Feature | File | Routes |
 | --- | --- | --- |
-| Auth | `src/features/auth/routes.js` | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/session` |
-| Users | `src/features/users/routes.js` | `/api/me`, `/api/users/:username`, `/api/users/:username/follow` |
-| Posts | `src/features/posts/routes.js` | `/api/posts`, `/api/feed`, `/api/posts/:id/like`, `/api/posts/:id/comments` |
+| Auth | `src/features/auth/routes.js` | Register, login, logout, reset password, verify email |
+| Uploads | `src/features/uploads/routes.js` | Upload image/video media |
+| Users | `src/features/users/routes.js` | `/api/me`, profiles, follows |
+| Posts | `src/features/posts/routes.js` | Public feed, personal feed, posts, likes, comments |
+| Notifications | `src/features/notifications/routes.js` | List/read notifications |
+| Search | `src/features/search/routes.js` | User and post search |
+| Moderation | `src/features/moderation/routes.js` | Reports, admin reports/users/post hiding/user suspension |
+| Messages | `src/features/messages/routes.js` | Threads, direct messages, SSE stream |
+
+## Upgrade notes
+
+- Uploads currently save to `public/uploads`. Upgrade to S3/R2/Azure Blob for production.
+- Password reset/email verification currently expose `dev_token` for MVP testing. Upgrade to email delivery.
+- Chat uses an SSE stream endpoint as a real-time foundation. Upgrade to Socket.IO/WebSockets for typing indicators and presence.
+- Admin is bootstrapped by making the first registered user an admin. Upgrade to explicit role management.

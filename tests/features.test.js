@@ -5,7 +5,7 @@ import { featureRegistry } from '../src/features/index.js';
 test('feature registry documents modular upgrade points', () => {
   assert.deepEqual(
     featureRegistry.map((feature) => feature.name),
-    ['auth', 'users', 'posts']
+    ['auth', 'uploads', 'users', 'posts', 'notifications', 'search', 'moderation', 'messages']
   );
   for (const feature of featureRegistry) {
     assert.equal(typeof feature.mountPath, 'string');

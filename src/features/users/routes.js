@@ -1,6 +1,7 @@
 import express from 'express';
 import { publicUser } from '../../lib/auth.js';
 import { authRequired } from '../../lib/http.js';
+import { createNotification } from '../../lib/notifications.js';
 import { getPosts } from '../../lib/posts.js';
 import { profileSchema } from '../../lib/schemas.js';
 
@@ -47,6 +48,7 @@ export function createUsersRouter({ db }) {
     }
 
     db.prepare('INSERT INTO follows (follower_id, following_id) VALUES (?, ?)').run(req.user.id, target.id);
+    createNotification(db, { userId: target.id, actorId: req.user.id, type: 'follow', entityType: 'user', entityId: req.user.id, body: `${req.user.username} followed you` });
     res.json({ following: true });
   });
 
