@@ -231,6 +231,27 @@ export default function Home() {
     }
   }
 
+  async function logout() {
+    setStatus('Logging out...');
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+      endVideoCall(false);
+      socketRef.current?.close();
+      socketRef.current = null;
+      setUser(null);
+      setNotifications([]);
+      setChatUser('');
+      setChatPeer(null);
+      setMessages([]);
+      setResults(null);
+      setMedia(null);
+      setStatus('Logged out.');
+      setMode('login');
+    } catch (err) {
+      setStatus(err.message);
+    }
+  }
+
   async function uploadFile(file) {
     const form = new FormData();
     form.append('media', file);
@@ -283,7 +304,7 @@ export default function Home() {
           <h1>Social Media MVP</h1>
           <p>Post updates, upload media, video chat, message friends in real time, manage your profile, and moderate community reports.</p>
         </div>
-        {user ? <div className="profileCard"><Avatar user={user} size={64} /><strong>@{user.username}</strong><span>{unreadCount} unread notifications</span></div> : null}
+        {user ? <div className="profileCard"><Avatar user={user} size={64} /><strong>@{user.username}</strong><span>{unreadCount} unread notifications</span><button type="button" className="secondaryButton" onClick={logout}>Logout</button></div> : null}
       </section>
 
       <nav className="frontLinks" aria-label="Front page links">

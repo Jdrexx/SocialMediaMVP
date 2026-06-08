@@ -15,6 +15,8 @@ button, input, textarea { font: inherit; }
 button { cursor: pointer; border: 0; border-radius: 999px; background: linear-gradient(135deg, var(--brand), var(--brand2)); color: white; padding: .75rem 1rem; font-weight: 800; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 button.danger { background: linear-gradient(135deg, #ef4444, #f97316); }
+.secondaryButton { width: 100%; background: rgba(148, 163, 184, .14); border: 1px solid var(--line); }
+.secondaryButton:hover, .secondaryButton:focus-visible { background: rgba(148, 163, 184, .24); outline: none; }
 a { color: inherit; }
 input, textarea { width: 100%; border: 1px solid var(--line); background: rgba(2, 6, 23, .74); color: var(--text); border-radius: 1rem; padding: .85rem 1rem; }
 textarea { min-height: 110px; resize: vertical; }
