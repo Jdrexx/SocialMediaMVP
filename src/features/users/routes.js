@@ -16,8 +16,27 @@ export function createUsersRouter({ db }) {
 
     const bio = parsed.data.bio ?? req.user.bio;
     const avatarUrl = parsed.data.avatar_url ?? req.user.avatar_url;
-    db.prepare('UPDATE users SET bio = ?, avatar_url = ? WHERE id = ?').run(bio, avatarUrl, req.user.id);
+    const coverUrl = parsed.data.cover_url ?? req.user.cover_url;
+    db.prepare('UPDATE users SET bio = ?, avatar_url = ?, cover_url = ? WHERE id = ?').run(bio, avatarUrl, coverUrl, req.user.id);
 
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    res.json({ user: publicUser(user) });
+  });
+
+  router.post('/me/avatar', authRequired, (req, res) => {
+    const mediaId = Number(req.body.media_id);
+    const media = db.prepare('SELECT * FROM media WHERE id = ? AND user_id = ? AND mime_type LIKE ?').get(mediaId, req.user.id, 'image/%');
+    if (!media) return res.status(400).json({ error: 'Upload an image first and pass its media_id' });
+    db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(media.url, req.user.id);
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    res.json({ user: publicUser(user) });
+  });
+
+  router.post('/me/cover', authRequired, (req, res) => {
+    const mediaId = Number(req.body.media_id);
+    const media = db.prepare('SELECT * FROM media WHERE id = ? AND user_id = ? AND mime_type LIKE ?').get(mediaId, req.user.id, 'image/%');
+    if (!media) return res.status(400).json({ error: 'Upload an image first and pass its media_id' });
+    db.prepare('UPDATE users SET cover_url = ? WHERE id = ?').run(media.url, req.user.id);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     res.json({ user: publicUser(user) });
   });

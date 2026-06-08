@@ -1,6 +1,7 @@
 import express from 'express';
 import { authRequired } from '../../lib/http.js';
 import { createNotification } from '../../lib/notifications.js';
+import { emitMessage } from '../../lib/realtime.js';
 import { messageSchema } from '../../lib/schemas.js';
 
 export function createMessagesRouter({ db }) {
@@ -22,7 +23,7 @@ export function createMessagesRouter({ db }) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.write(`event: connected\ndata: ${JSON.stringify({ ok: true, user_id: req.user.id })}\n\n`);
+    res.write(`event: connected\ndata: ${JSON.stringify({ ok: true, user_id: req.user.id, preferred: 'socket.io' })}\n\n`);
     res.end();
   });
 
@@ -58,6 +59,7 @@ export function createMessagesRouter({ db }) {
       WHERE messages.id = ?
     `).get(result.lastInsertRowid);
     createNotification(db, { userId: recipient.id, actorId: req.user.id, type: 'message', entityType: 'message', entityId: message.id, body: `${req.user.username}: ${parsed.data.body}` });
+    emitMessage(req.app.locals.context?.io, message);
     res.status(201).json({ message });
   });
 

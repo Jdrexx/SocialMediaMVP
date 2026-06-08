@@ -27,6 +27,7 @@ export function migrate(db) {
       password_hash TEXT NOT NULL,
       bio TEXT NOT NULL DEFAULT '',
       avatar_url TEXT NOT NULL DEFAULT '',
+      cover_url TEXT NOT NULL DEFAULT '',
       email_verified INTEGER NOT NULL DEFAULT 0,
       is_admin INTEGER NOT NULL DEFAULT 0,
       is_suspended INTEGER NOT NULL DEFAULT 0,
@@ -127,6 +128,7 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(sender_id, recipient_id, created_at ASC);
   `);
 
+  addColumnIfMissing(db, 'users', 'cover_url', 'TEXT NOT NULL DEFAULT \'\'');
   addColumnIfMissing(db, 'users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'users', 'is_admin', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'users', 'is_suspended', 'INTEGER NOT NULL DEFAULT 0');

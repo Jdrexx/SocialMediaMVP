@@ -27,5 +27,6 @@ export const reportSchema = z.object({ reason: z.string().trim().min(3).max(240)
 
 export const profileSchema = z.object({
   bio: z.string().trim().max(240).optional(),
-  avatar_url: z.string().trim().url().optional().or(z.literal(''))
+  avatar_url: z.string().trim().url().optional().or(z.literal('')),
+  cover_url: z.string().trim().url().optional().or(z.literal(''))
 });

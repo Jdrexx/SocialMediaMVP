@@ -18,7 +18,7 @@ export function serializePost(row, db) {
 
 export function getPosts(db, viewerId, whereSql = '', params = []) {
   const rows = db.prepare(`
-    SELECT posts.*, users.username, users.avatar_url, media.url AS media_url,
+    SELECT posts.*, users.username, users.avatar_url, media.url AS media_url, media.mime_type AS media_type,
       (SELECT COUNT(*) FROM likes WHERE likes.post_id = posts.id) AS like_count,
       (SELECT COUNT(*) FROM comments WHERE comments.post_id = posts.id) AS comment_count,
       EXISTS(SELECT 1 FROM likes WHERE likes.post_id = posts.id AND likes.user_id = ?) AS liked_by_me

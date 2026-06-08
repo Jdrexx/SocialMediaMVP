@@ -1,11 +1,17 @@
+import http from 'node:http';
 import { createApp } from './app.js';
 import { createDatabase } from './db.js';
+import { getRuntimeConfig } from './lib/env.js';
+import { attachRealtimeServer } from './lib/realtime.js';
 
-const port = Number(process.env.PORT || 3000);
-const dbFile = process.env.DB_FILE || 'social.sqlite';
-const db = createDatabase(dbFile);
-const app = createApp({ db });
+const config = getRuntimeConfig();
+const db = createDatabase(config.dbFile);
+const app = createApp({ db, config });
+const server = http.createServer(app);
+const io = attachRealtimeServer(server, { db, jwtSecret: config.jwtSecret });
+app.locals.context.io = io;
 
-app.listen(port, () => {
-  console.log(`Social media MVP running at http://localhost:${port}`);
+server.listen(config.port, () => {
+  console.log(`Social media MVP running at http://localhost:${config.port}`);
+  console.log(`Email sending: ${app.locals.context.email.enabled ? 'configured' : 'dev-token fallback'}`);
 });

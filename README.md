@@ -1,29 +1,36 @@
 # Social Media MVP
 
-A working full-stack social media MVP built to be easy to upgrade.
+A working full-stack social media platform MVP built to be easy to upgrade and deploy.
 
 ## Features
 
+- Express API with modular feature folders
+- React/Next.js frontend in the App Router
+- Mobile-friendly responsive UI
 - Email/password auth with HTTP-only JWT cookie sessions
-- Password reset token flow
-- Email verification token flow
-- Profiles with bio and avatar URL
-- Posts with uploaded image/video media or fallback image URL
+- Production auth hardening: required strong `JWT_SECRET` in production, secure cookies, `trust proxy`, hidden Express signature, tighter auth rate limits
+- Real SMTP email sending for password reset and email verification when SMTP variables are configured
+- Local dev-token fallback for reset/verification while developing locally
+- Profiles with bio, profile photo, and cover image
+- Uploaded image/video media for posts
 - Likes/unlikes
 - Comments
 - Follow/unfollow
 - Notifications for likes, comments, follows, and messages
 - User/post search
 - Report posts
-- Admin/moderation dashboard APIs and UI section
-- Real-time-ready chat/messages with an SSE stream endpoint
+- Admin/moderation dashboard APIs
+- Real-time chat delivery with Socket.IO
+- Typing indicators over WebSockets
+- SSE compatibility endpoint for older realtime clients
 - Authenticated personal feed plus public feed
-- SQLite persistence
-- Modular backend feature folders
+- SQLite persistence for local/dev, with production requiring a persistent `DB_FILE` volume before deploy
 - API tests
 - Feature scaffolding helper
 
 ## Run locally
+
+Backend API/static legacy UI:
 
 ```bash
 npm install
@@ -32,40 +39,86 @@ npm start
 
 Open: http://localhost:3000
 
+Next.js frontend:
+
+```bash
+npm run frontend:dev
+```
+
+Open: http://localhost:3001
+
+The Next.js dev server proxies `/api/*` and `/uploads/*` to the Express backend at `http://localhost:3000`. Set `NEXT_PUBLIC_API_URL` if your API is elsewhere.
+
 On Windows, you can also double-click:
 
 ```text
 run-social-mvp.bat
 ```
 
-## Test
+## Test and build
 
 ```bash
 npm test
+npm run frontend:build
 ```
+
+Current verification target: all API tests pass and the Next.js production build succeeds.
+
+## Environment variables
+
+```env
+NODE_ENV=production
+PUBLIC_URL=https://your-domain.com
+JWT_SECRET=generate-a-64-character-random-secret
+DB_FILE=/data/social.sqlite
+
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=resend
+SMTP_PASS=your-smtp-password
+SMTP_FROM="Social Media MVP <no-reply@your-domain.com>"
+
+NEXT_PUBLIC_API_URL=https://your-api-domain.com
+```
+
+Generate a strong secret:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Production startup will fail fast if `JWT_SECRET` is weak or if neither `DB_FILE` nor `DATABASE_URL` is set. The current runtime uses SQLite, so set `DB_FILE` to a persistent mounted volume on Railway/Fly/VPS. A managed PostgreSQL migration is still the recommended next step for high-scale production.
 
 ## Upgrade-friendly structure
 
 ```text
+app/                             # Next.js frontend
+  layout.jsx
+  page.jsx
+  globals.css
 src/
   app.js                         # Small Express setup and feature registration
-  db.js                          # Database schema/migrations
-  server.js                      # Server entrypoint
+  db.js                          # SQLite schema/migrations
+  server.js                      # HTTP + Socket.IO server entrypoint
   features/
     index.js                     # Feature registry
-    auth/routes.js               # Auth, reset, email verification
+    auth/routes.js               # Auth, SMTP-backed reset, email verification
     uploads/routes.js            # Media uploads
-    users/routes.js              # Profile/follow routes
+    users/routes.js              # Profile/follow/avatar/cover routes
     posts/routes.js              # Feed/post/like/comment routes
     notifications/routes.js      # Notifications
     search/routes.js             # User/post search
     moderation/routes.js         # Reports and admin moderation
-    messages/routes.js           # Chat/messages and SSE stream
+    messages/routes.js           # Chat/messages and SSE compatibility stream
   lib/
     auth.js                      # Shared auth/session helpers
+    email.js                     # Nodemailer SMTP service
+    env.js                       # Runtime config and production guards
     http.js                      # Shared middleware
     notifications.js             # Notification helper
     posts.js                     # Shared post query/serialization helpers
+    realtime.js                  # Socket.IO setup and emit helpers
     schemas.js                   # Shared request validation schemas
 ```
 
@@ -73,6 +126,7 @@ Detailed docs:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Adding Features Guide](docs/ADDING_FEATURES.md)
+- [Deployment Readiness](docs/DEPLOYMENT_READY.md)
 
 ## Add a new feature
 
@@ -88,7 +142,7 @@ Then:
 2. Add tests in `tests/`.
 3. Add database tables/indexes in `src/db.js` if needed.
 4. Implement routes in `src/features/bookmarks/routes.js`.
-5. Run `npm test`.
+5. Run `npm test` and `npm run frontend:build`.
 
 ## API overview
 
@@ -107,6 +161,8 @@ Then:
 
 - `GET /api/me`
 - `PATCH /api/me`
+- `POST /api/me/avatar`
+- `POST /api/me/cover`
 - `GET /api/users/:username`
 - `POST /api/users/:username/follow`
 - `GET /api/posts`
@@ -116,7 +172,7 @@ Then:
 - `POST /api/posts/:id/like`
 - `POST /api/posts/:id/comments`
 
-### New feature APIs
+### Feature APIs
 
 - `POST /api/uploads`
 - `GET /api/notifications`
@@ -135,23 +191,8 @@ Then:
 
 ## MVP notes
 
-The password reset and email verification features return `dev_token` in API responses for local MVP testing. In production, send those tokens by email and remove token display from the UI/API response.
-
-The first registered user becomes an admin. In production, manage admins through a secure admin table or environment-controlled bootstrap process.
-
-The chat feature includes an SSE stream endpoint so real-time clients have a clean upgrade path. For high-scale production chat, upgrade to Socket.IO/WebSockets or a managed realtime service.
-
-## Production hardening checklist
-
-- HTTPS-only secure cookies
-- Strong `JWT_SECRET` via `.env`
-- Real email sending for reset/verification tokens
-- Cloud/object storage for uploads
-- Virus scanning/media moderation
-- PostgreSQL instead of SQLite
-- Pagination/infinite scroll
-- Stronger admin audit logs
-- WebSocket-backed chat presence/typing indicators
-- Database backups
-- Observability/logging
-- CI/CD deployment pipeline
+- If SMTP is configured, password reset and verification links are sent by email.
+- If SMTP is not configured, the API returns `dev_token` for local development only.
+- The first registered user becomes an admin.
+- Socket.IO now powers realtime message delivery and typing events.
+- Local uploads and SQLite are fine for MVP demos; production should use persistent storage/backups, and a managed database migration when usage grows.
