@@ -91,3 +91,30 @@ h2 { margin: 0 0 1rem; }
   .inline, .incomingCall, .videoGrid { flex-direction: column; grid-template-columns: 1fr; }
   button { width: 100%; }
 }
+
+/* ── Admin panel ── */
+
+.adminShell { display: grid; gap: 1.5rem; }
+.adminHeader { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.adminHeader h1 { margin: 0; }
+.statsGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .75rem; }
+.statCard { display: grid; gap: .15rem; padding: 1rem; background: var(--card); border: 1px solid var(--line); border-radius: 1rem; text-align: center; }
+.statCard strong { font-size: 1.6rem; color: #67e8f9; }
+.statCard span { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.adminTabs { display: flex; gap: .5rem; flex-wrap: wrap; }
+.adminTabs button { background: rgba(148,163,184,.14); padding: .6rem 1.2rem; }
+.adminTabs button.active { background: linear-gradient(135deg, var(--brand), var(--brand2)); }
+.adminSection { display: grid; gap: .5rem; }
+.adminTableWrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 1rem; background: var(--card); }
+.adminTable { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.adminTable th, .adminTable td { padding: .6rem .75rem; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.adminTable th { background: rgba(2,6,23,.5); color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: .75rem; }
+.adminTable tr:last-child td { border-bottom: 0; }
+.adminTable tbody tr:hover { background: rgba(148,163,184,.06); }
+.rowHidden { opacity: .5; }
+.postBodyCell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adminActions { display: flex; gap: .35rem; }
+.adminActions button { padding: .35rem .6rem; font-size: .78rem; font-weight: 700; }
+.adminActions button:disabled { opacity: .35; }
+.adminTable select, .adminShell input:not([type=file]), .adminShell select { padding: .5rem .75rem; border-radius: .75rem; background: rgba(2,6,23,.74); color: var(--text); border: 1px solid var(--line); font-size: .85rem; }
+.adminShell select { cursor: pointer; }

@@ -103,10 +103,12 @@ Open http://localhost:3000 and verify the feature from the UI.
 The frontend is intentionally simple right now:
 
 ```text
-public/index.html   # Structure
-public/style.css    # Styling
-public/app.js       # Browser API calls and rendering
+legacy-frontend/index.html   # Structure
+legacy-frontend/style.css    # Styling
+legacy-frontend/app.js       # Browser API calls and rendering
 ```
+
+(The legacy frontend was migrated from `public/` to `legacy-frontend/` when the Next.js frontend was added.)
 
 For small features, add a section/form to `index.html`, styles to `style.css`, and API handlers/rendering to `app.js`.
 

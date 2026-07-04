@@ -1,6 +1,10 @@
 # Social Media MVP
 
+[![CI](https://github.com/Jdrexx/SocialMediaMVP/actions/workflows/ci.yml/badge.svg)](https://github.com/Jdrexx/SocialMediaMVP/actions/workflows/ci.yml)
+
 A working full-stack social media platform MVP — Express API, Next.js frontend, real-time chat, WebRTC video calls, and production-hardened auth. Built to be easy to upgrade and deploy.
+
+![Admin Dashboard](tests/admin-stats.png)
 
 ## Features
 
@@ -59,6 +63,17 @@ npm run frontend:build
 
 All API tests pass and the Next.js production build succeeds.
 
+## Admin Access
+
+The first registered user is automatically granted admin privileges. After signing up as the first user, an **Admin Panel** link appears in the profile card on the home page. Visit `/admin` to manage users, posts, and reports.
+
+Example accounts for local testing (register fresh to use them):
+
+| Username | Email | Password | Role |
+|---|---|---|---|
+| admin | admin@social.com | Password123! | Admin |
+| jane | jane@test.com | Password123! | User |
+
 ## Railway Deployment
 
 Config in `railway.json`. Full instructions in `docs/RAILWAY_DEPLOYMENT.md`.
@@ -106,7 +121,27 @@ Production fails fast if `JWT_SECRET` is weak or neither `DB_FILE` nor `DATABASE
 app/                          # Next.js frontend
 ├── layout.jsx
 ├── page.jsx
+├── about-us/page.jsx
+├── contact/page.jsx
+├── pricing/page.jsx
+├── rules-of-conduct/page.jsx
 └── globals.css
+legacy-frontend/              # Original HTML/JS/CSS frontend (pre-Next.js)
+├── index.html
+├── app.js
+└── style.css
+components/                   # Shared React components
+├── api.js                    # API client utility
+├── AuthForm.jsx              # Login / Register
+├── Avatar.jsx                # Reusable avatar
+├── ChatPanel.jsx             # Messages + video call
+├── Feed.jsx                  # Post feed
+├── NavLinks.jsx              # Front page navigation
+├── NotificationsPanel.jsx    # Notification list
+├── PostCard.jsx              # Individual post
+├── PostComposer.jsx          # Create post form
+├── ProfileCard.jsx           # User profile card
+└── SearchPanel.jsx           # Search users/posts
 src/
 ├── app.js                    # Express setup and feature registration
 ├── db.js                     # SQLite schema/migrations
