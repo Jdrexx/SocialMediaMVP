@@ -1,4 +1,6 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { adminRequired, authRequired } from '../../lib/http.js';
 import { publicUser } from '../../lib/auth.js';
 import { reportSchema } from '../../lib/schemas.js';
@@ -169,6 +171,43 @@ export function createModerationRouter({ db }) {
     if (!post) return res.status(404).json({ error: 'Post not found' });
     db.prepare('UPDATE posts SET is_hidden = 0 WHERE id = ?').run(post.id);
     res.json({ ok: true, hidden: false });
+  });
+
+  // ── Admin: seed random users ──
+
+  const adjectives = ['Swift', 'Brave', 'Clever', 'Quiet', 'Fierce', 'Gentle', 'Happy', 'Lucky', 'Bold', 'Calm', 'Eager', 'Noble', 'Proud', 'Sharp', 'Wise', 'Bright', 'Daring', 'Fancy', 'Grand', 'Kind', 'Neat', 'Prime', 'Rich', 'Safe', 'Cool', 'Epic', 'Fair', 'Gold', 'High', 'Fast'];
+  const nouns = ['Panda', 'Falcon', 'Tiger', 'Dolphin', 'Eagle', 'Fox', 'Wolf', 'Bear', 'Lynx', 'Hawk', 'Otter', 'Raven', 'Elk', 'Owl', 'Hare', 'Koala', 'Lion', 'Deer', 'Seal', 'Viper', 'Ape', 'Bat', 'Mole', 'Gnat', 'Jay', 'Ram', 'Yak', 'Zebra', 'Crab', 'Moth'];
+
+  function randomUsername() {
+    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    const num = Math.floor(Math.random() * 999);
+    return `${adj}${noun}${num}`;
+  }
+
+  router.post('/admin/seed/users', adminRequired, async (req, res) => {
+    const count = Math.min(Math.max(Number(req.body.count) || 1, 1), 100);
+    const passwordHash = await bcrypt.hash('Password123!', 10);
+    const insert = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)');
+    const created = [];
+
+    const tx = db.transaction(() => {
+      for (let i = 0; i < count; i++) {
+        let username, email;
+        let attempts = 0;
+        do {
+          username = randomUsername();
+          email = `${username.toLowerCase()}@seed.test`;
+          attempts++;
+        } while (attempts < 20 && db.prepare('SELECT 1 FROM users WHERE username = ? OR email = ?').get(username, email));
+        if (attempts >= 20) continue;
+        insert.run(username, email, passwordHash);
+        created.push({ username, email });
+      }
+    });
+    tx();
+
+    res.status(201).json({ created: created.length, users: created });
   });
 
   return router;

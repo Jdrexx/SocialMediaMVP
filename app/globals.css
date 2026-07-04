@@ -118,3 +118,7 @@ h2 { margin: 0 0 1rem; }
 .adminActions button:disabled { opacity: .35; }
 .adminTable select, .adminShell input:not([type=file]), .adminShell select { padding: .5rem .75rem; border-radius: .75rem; background: rgba(2,6,23,.74); color: var(--text); border: 1px solid var(--line); font-size: .85rem; }
 .adminShell select { cursor: pointer; }
+.seedSection { display: grid; gap: .5rem; }
+.seedSection h2 { margin: 0; }
+.seedButtons { flex-wrap: wrap; }
+.seedButtons button { min-width: 60px; }

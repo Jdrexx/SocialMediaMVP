@@ -123,6 +123,19 @@ export default function AdminPage() {
         <StatCard label="Uploads" value={stats.uploadsTotal} />
       </section>
 
+      {/* Seed users */}
+      <section className="card seedSection">
+        <h2>Seed Users</h2>
+        <p className="status">Generate random test users with password <strong>Password123!</strong></p>
+        <div className="inline seedButtons">
+          {[1, 5, 10, 15, 20].map((n) => (
+            <button key={n} onClick={() => adminAct('POST', '/api/admin/seed/users', { count: n })}>
+              +{n}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* Tabs */}
       <AdminTabs
         tabs={[

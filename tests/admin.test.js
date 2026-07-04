@@ -120,3 +120,17 @@ test('non-admin cannot access admin routes', async () => {
   const users = await request(app).get('/api/admin/users').set('Cookie', cookie);
   assert.equal(users.status, 403);
 });
+
+test('admin can seed random users in batches', async () => {
+  const { app } = setup();
+  const admin = await register(app, 'admin', 'admin@example.com');
+  const cookie = admin.headers['set-cookie'];
+
+  const seeded = await request(app).post('/api/admin/seed/users').set('Cookie', cookie).send({ count: 5 });
+  assert.equal(seeded.status, 201);
+  assert.equal(seeded.body.created, 5);
+  assert.equal(seeded.body.users.length, 5);
+
+  const users = await request(app).get('/api/admin/users').set('Cookie', cookie);
+  assert.equal(users.body.users.length, 6); // admin(1) + 5 seeded
+});
