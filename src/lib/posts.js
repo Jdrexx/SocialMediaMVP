@@ -16,7 +16,7 @@ export function serializePost(row, db) {
   };
 }
 
-export function getPosts(db, viewerId, whereSql = '', params = []) {
+export function getPosts(db, viewerId, whereSql = '', params = [], limit = 50) {
   const rows = db.prepare(`
     SELECT posts.*, users.username, users.avatar_url, media.url AS media_url, media.mime_type AS media_type,
       (SELECT COUNT(*) FROM likes WHERE likes.post_id = posts.id) AS like_count,
@@ -27,8 +27,8 @@ export function getPosts(db, viewerId, whereSql = '', params = []) {
     LEFT JOIN media ON media.id = posts.media_id
     ${whereSql ? `${whereSql} AND posts.is_hidden = 0` : 'WHERE posts.is_hidden = 0'}
     ORDER BY posts.created_at DESC, posts.id DESC
-    LIMIT 50
-  `).all(viewerId ?? 0, ...params);
+    LIMIT ?
+  `).all(viewerId ?? 0, ...params, limit);
 
   return rows.map((row) => serializePost(row, db));
 }

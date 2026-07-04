@@ -122,3 +122,12 @@ h2 { margin: 0 0 1rem; }
 .seedSection h2 { margin: 0; }
 .seedButtons { flex-wrap: wrap; }
 .seedButtons button { min-width: 60px; }
+.postMeta { display: flex; gap: 1rem; font-size: .85rem; color: var(--muted); align-items: center; }
+.postMeta span { cursor: default; }
+.textButton { background: none; border: none; color: var(--muted); padding: 0; font-weight: 600; font-size: .85rem; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.textButton:hover { color: #67e8f9; }
+.editedBadge { font-size: .7rem; color: var(--muted); background: rgba(148,163,184,.14); padding: .1rem .4rem; border-radius: .5rem; }
+.hashtag { color: #67e8f9; text-decoration: none; font-weight: 600; }
+.hashtag:hover { text-decoration: underline; }
+.loadMoreWrap { grid-column: 1 / -1; display: flex; justify-content: center; padding: 1rem 0; }
+.editForm { display: grid; gap: .5rem; }

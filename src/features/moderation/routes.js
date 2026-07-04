@@ -1,12 +1,16 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import crypto from 'node:crypto';
 import { adminRequired, authRequired } from '../../lib/http.js';
 import { publicUser } from '../../lib/auth.js';
 import { reportSchema } from '../../lib/schemas.js';
+import { logAdminAction } from '../../lib/audit.js';
 
 export function createModerationRouter({ db }) {
   const router = express.Router();
+
+  function audit(req, action, targetType, targetId, details = '') {
+    logAdminAction(db, { adminId: req.user.id, action, targetType, targetId, details });
+  }
 
   // ── Reports (user-facing) ──
 
@@ -25,6 +29,7 @@ export function createModerationRouter({ db }) {
     const users = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
     const admins = db.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1').get().c;
     const suspended = db.prepare('SELECT COUNT(*) AS c FROM users WHERE is_suspended = 1').get().c;
+    const blocked = db.prepare('SELECT COUNT(*) AS c FROM blocks').get().c;
     const posts = db.prepare('SELECT COUNT(*) AS c FROM posts').get().c;
     const hiddenPosts = db.prepare('SELECT COUNT(*) AS c FROM posts WHERE is_hidden = 1').get().c;
     const reportsOpen = db.prepare("SELECT COUNT(*) AS c FROM reports WHERE status = 'open'").get().c;
@@ -34,13 +39,30 @@ export function createModerationRouter({ db }) {
     const messagesTotal = db.prepare('SELECT COUNT(*) AS c FROM messages').get().c;
     const followsTotal = db.prepare('SELECT COUNT(*) AS c FROM follows').get().c;
     const uploadsTotal = db.prepare('SELECT COUNT(*) AS c FROM media').get().c;
+    const bookmarksTotal = db.prepare('SELECT COUNT(*) AS c FROM bookmarks').get().c;
+    const auditLogTotal = db.prepare('SELECT COUNT(*) AS c FROM activity_log').get().c;
 
     res.json({
-      users, admins, suspended,
+      users, admins, suspended, blocked,
       posts, hiddenPosts,
       reportsOpen, reportsResolved, reportsDismissed,
-      commentsTotal, messagesTotal, followsTotal, uploadsTotal
+      commentsTotal, messagesTotal, followsTotal, uploadsTotal,
+      bookmarksTotal, auditLogTotal
     });
+  });
+
+  // ── Admin: activity log ──
+
+  router.get('/admin/log', adminRequired, (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const entries = db.prepare(`
+      SELECT activity_log.*, users.username AS admin_username
+      FROM activity_log
+      LEFT JOIN users ON users.id = activity_log.admin_id
+      ORDER BY activity_log.created_at DESC
+      LIMIT ?
+    `).all(limit);
+    res.json({ entries });
   });
 
   // ── Admin: list all posts ──
@@ -74,6 +96,18 @@ export function createModerationRouter({ db }) {
     res.json({ posts });
   });
 
+  // ── Admin: edit post content (PATCH) ──
+
+  router.patch('/admin/posts/:id', adminRequired, (req, res) => {
+    const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    const body = String(req.body.body ?? post.body).trim();
+    if (!body) return res.status(400).json({ error: 'Post body cannot be empty' });
+    db.prepare('UPDATE posts SET body = ?, edited = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body, post.id);
+    audit(req, 'edit_post', 'post', post.id, `Body edited by admin`);
+    res.json({ ok: true });
+  });
+
   // ── Admin: list all users ──
 
   router.get('/admin/users', adminRequired, (_req, res) => {
@@ -81,7 +115,8 @@ export function createModerationRouter({ db }) {
       SELECT id, username, email, bio, avatar_url, cover_url,
         email_verified, is_admin, is_suspended, created_at,
         (SELECT COUNT(*) FROM posts WHERE posts.user_id = users.id) AS post_count,
-        (SELECT COUNT(*) FROM follows WHERE follows.following_id = users.id) AS follower_count
+        (SELECT COUNT(*) FROM follows WHERE follows.following_id = users.id) AS follower_count,
+        (SELECT COUNT(*) FROM blocks WHERE blocks.blocked_id = users.id) AS blocked_by_count
       FROM users ORDER BY created_at DESC
     `).all();
     res.json({
@@ -113,6 +148,13 @@ export function createModerationRouter({ db }) {
       .run(username, email, bio, isAdmin, isSuspended, user.id);
 
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+    const changed = [];
+    if (username !== user.username) changed.push('username');
+    if (email !== user.email) changed.push('email');
+    if (Number(isAdmin) !== user.is_admin) changed.push(`is_admin:${isAdmin ? 'promote' : 'demote'}`);
+    if (Number(isSuspended) !== user.is_suspended) changed.push(`suspend:${isSuspended}`);
+    audit(req, 'edit_user', 'user', user.id, changed.join(', '));
+
     res.json({ user: publicUser(updated) });
   });
 
@@ -122,12 +164,14 @@ export function createModerationRouter({ db }) {
     if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: 'You cannot suspend yourself' });
     const result = db.prepare('UPDATE users SET is_suspended = 1 WHERE id = ?').run(req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'User not found' });
+    audit(req, 'suspend_user', 'user', Number(req.params.id));
     res.json({ ok: true, suspended: true });
   });
 
   router.post('/admin/users/:id/unsuspend', adminRequired, (req, res) => {
     const result = db.prepare('UPDATE users SET is_suspended = 0 WHERE id = ?').run(req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'User not found' });
+    audit(req, 'unsuspend_user', 'user', Number(req.params.id));
     res.json({ ok: true, suspended: false });
   });
 
@@ -147,12 +191,14 @@ export function createModerationRouter({ db }) {
   router.post('/admin/reports/:id/resolve', adminRequired, (req, res) => {
     const result = db.prepare("UPDATE reports SET status = 'resolved' WHERE id = ?").run(req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'Report not found' });
+    audit(req, 'resolve_report', 'report', Number(req.params.id));
     res.json({ ok: true, status: 'resolved' });
   });
 
   router.post('/admin/reports/:id/dismiss', adminRequired, (req, res) => {
     const result = db.prepare("UPDATE reports SET status = 'dismissed' WHERE id = ?").run(req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'Report not found' });
+    audit(req, 'dismiss_report', 'report', Number(req.params.id));
     res.json({ ok: true, status: 'dismissed' });
   });
 
@@ -163,6 +209,7 @@ export function createModerationRouter({ db }) {
     if (!post) return res.status(404).json({ error: 'Post not found' });
     db.prepare('UPDATE posts SET is_hidden = 1 WHERE id = ?').run(post.id);
     db.prepare("UPDATE reports SET status = 'resolved' WHERE target_type = 'post' AND target_id = ?").run(post.id);
+    audit(req, 'hide_post', 'post', post.id);
     res.json({ ok: true, hidden: true });
   });
 
@@ -170,7 +217,59 @@ export function createModerationRouter({ db }) {
     const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
     db.prepare('UPDATE posts SET is_hidden = 0 WHERE id = ?').run(post.id);
+    audit(req, 'unhide_post', 'post', post.id);
     res.json({ ok: true, hidden: false });
+  });
+
+  // ── Admin: bulk actions ──
+
+  router.post('/admin/bulk', adminRequired, (req, res) => {
+    const { action, ids, extra } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+    if (ids.length > 100) return res.status(400).json({ error: 'Max 100 items per bulk action' });
+    let done = 0;
+    const tx = db.transaction(() => {
+      for (const id of ids) {
+        if (action === 'hide_posts') {
+          db.prepare('UPDATE posts SET is_hidden = 1 WHERE id = ?').run(id);
+          audit(req, 'bulk_hide_posts', 'post', id);
+          done++;
+        } else if (action === 'unhide_posts') {
+          db.prepare('UPDATE posts SET is_hidden = 0 WHERE id = ?').run(id);
+          audit(req, 'bulk_unhide_posts', 'post', id);
+          done++;
+        } else if (action === 'suspend_users') {
+          if (Number(id) !== req.user.id) {
+            db.prepare('UPDATE users SET is_suspended = 1 WHERE id = ?').run(id);
+            audit(req, 'bulk_suspend_users', 'user', id);
+            done++;
+          }
+        } else if (action === 'unsuspend_users') {
+          db.prepare('UPDATE users SET is_suspended = 0 WHERE id = ?').run(id);
+          audit(req, 'bulk_unsuspend_users', 'user', id);
+          done++;
+        } else if (action === 'resolve_reports') {
+          db.prepare("UPDATE reports SET status = 'resolved' WHERE id = ?").run(id);
+          audit(req, 'bulk_resolve_reports', 'report', id);
+          done++;
+        } else if (action === 'delete_users') {
+          if (Number(id) !== req.user.id) {
+            db.prepare('DELETE FROM users WHERE id = ?').run(id);
+            audit(req, 'bulk_delete_users', 'user', id);
+            done++;
+          }
+        } else if (action === 'delete_posts') {
+          const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(id);
+          if (post) {
+            db.prepare('DELETE FROM posts WHERE id = ?').run(id);
+            audit(req, 'bulk_delete_posts', 'post', id);
+            done++;
+          }
+        }
+      }
+    });
+    tx();
+    res.json({ ok: true, action, processed: done, total: ids.length });
   });
 
   // ── Admin: seed random users ──
@@ -206,7 +305,7 @@ export function createModerationRouter({ db }) {
       }
     });
     tx();
-
+    audit(req, 'seed_users', 'user', 0, `Seeded ${created.length} users`);
     res.status(201).json({ created: created.length, users: created });
   });
 
@@ -226,6 +325,7 @@ export function createModerationRouter({ db }) {
     const passwordHash = await bcrypt.hash(password, 12);
     const result = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, passwordHash);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+    audit(req, 'create_user', 'user', user.id, `Created by admin`);
     res.status(201).json({ user: publicUser(user) });
   });
 
@@ -235,7 +335,46 @@ export function createModerationRouter({ db }) {
     if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: 'You cannot delete yourself' });
     const result = db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'User not found' });
+    audit(req, 'delete_user', 'user', Number(req.params.id));
     res.json({ ok: true });
+  });
+
+  // ── Admin: user detail page data ──
+
+  router.get('/admin/users/:id/detail', adminRequired, (req, res) => {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const posts = db.prepare(`
+      SELECT posts.*,
+        (SELECT COUNT(*) FROM likes WHERE likes.post_id = posts.id) AS like_count,
+        (SELECT COUNT(*) FROM comments WHERE comments.post_id = posts.id) AS comment_count
+      FROM posts WHERE posts.user_id = ? ORDER BY posts.created_at DESC LIMIT 50
+    `).all(user.id);
+
+    const reportsAgainst = db.prepare(`
+      SELECT reports.*, users.username AS reporter_username FROM reports
+      LEFT JOIN users ON users.id = reports.reporter_id
+      WHERE reports.target_type = 'post' AND reports.target_id IN (SELECT id FROM posts WHERE user_id = ?)
+      ORDER BY reports.created_at DESC LIMIT 20
+    `).all(user.id);
+
+    const blocks = db.prepare(`
+      SELECT blocks.*, users.username AS blocked_username FROM blocks
+      JOIN users ON users.id = blocks.blocked_id
+      WHERE blocks.blocker_id = ?
+    `).all(user.id);
+
+    const blockedBy = db.prepare(`
+      SELECT blocks.*, users.username AS blocker_username FROM blocks
+      JOIN users ON users.id = blocks.blocker_id
+      WHERE blocks.blocked_id = ?
+    `).all(user.id);
+
+    res.json({
+      user: { ...publicUser(user), post_count: posts.length },
+      posts, reportsAgainst, blocks, blockedBy
+    });
   });
 
   return router;

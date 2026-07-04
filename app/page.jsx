@@ -17,6 +17,7 @@ export default function Home() {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('');
   const [posts, setPosts] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [chatUser, setChatUser] = useState('');
   const [chatPeer, setChatPeer] = useState(null);
@@ -29,9 +30,15 @@ export default function Home() {
 
   const signedIn = Boolean(user);
 
-  const loadFeed = useCallback(async () => {
-    const data = await api('/api/posts');
-    setPosts(data.posts || []);
+  const loadFeed = useCallback(async (cursor) => {
+    const url = cursor ? `/api/posts?before=${cursor}&limit=25` : '/api/posts?limit=25';
+    const data = await api(url);
+    if (cursor) {
+      setPosts((prev) => [...prev, ...data.posts]);
+    } else {
+      setPosts(data.posts || []);
+    }
+    setNextCursor(data.next || null);
   }, []);
 
   const loadNotifications = useCallback(async () => {
@@ -49,7 +56,6 @@ export default function Home() {
     setStatus('Logging out...');
     try {
       await api('/api/auth/logout', { method: 'POST' });
-      const pc = null;
       socketRef.current?.close();
       socketRef.current = null;
       setUser(null);
@@ -58,10 +64,15 @@ export default function Home() {
       setChatPeer(null);
       setMessages([]);
       setPosts([]);
+      setNextCursor(null);
       setStatus('Logged out.');
     } catch (err) {
       setStatus(err.message);
     }
+  }
+
+  function handleBookmarkToggle() {
+    loadFeed(); // Refresh feed to update bookmark state
   }
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read_at).length, [notifications]);
@@ -73,28 +84,19 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return;
-
-    // Load initial notifications
     loadNotifications().catch(() => null);
-
-    // Connect Socket.IO
     const API = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
     const socket = io(API, { withCredentials: true });
     socketRef.current = socket;
-
     socket.on('message:new', ({ message }) => {
       if (chatUser && [message.sender_username, message.recipient_username].includes(chatUser)) {
         setMessages((prev) => [...prev, message]);
       }
       loadNotifications().catch(() => null);
     });
-
     socket.on('typing:start', ({ username }) => setTyping(`${username} is typing...`));
     socket.on('typing:stop', () => setTyping(''));
-
-    return () => {
-      socket.close();
-    };
+    return () => { socket.close(); };
   }, [user, chatUser, loadNotifications]);
 
   function handleSelectUser(userData) {
@@ -129,7 +131,7 @@ export default function Home() {
         <>
           <div className="dashboard">
             <ProfileCard user={user} onUserUpdate={setUser} />
-            <PostComposer onPostCreated={setPosts} posts={posts} />
+            <PostComposer onPostCreated={(newPosts) => { setPosts(newPosts); setNextCursor(null); }} posts={posts} />
             <SearchPanel onSelectUser={handleSelectUser} />
             <ChatPanel
               user={user}
@@ -154,7 +156,13 @@ export default function Home() {
               onRefresh={loadNotifications}
             />
           </div>
-          <Feed posts={posts} />
+          <Feed
+            posts={posts}
+            currentUser={user}
+            onBookmarkToggle={handleBookmarkToggle}
+            onLoadMore={() => loadFeed(nextCursor)}
+            hasMore={!!nextCursor}
+          />
         </>
       )}
     </main>

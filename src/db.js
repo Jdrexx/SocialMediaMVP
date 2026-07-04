@@ -140,4 +140,38 @@ export function migrate(db) {
   addColumnIfMissing(db, 'users', 'is_suspended', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'posts', 'media_id', 'INTEGER REFERENCES media(id) ON DELETE SET NULL');
   addColumnIfMissing(db, 'posts', 'is_hidden', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'posts', 'edited', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'posts', 'updated_at', 'TEXT');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, post_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS blocks (
+      blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (blocker_id, blocked_id),
+      CHECK (blocker_id != blocked_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_activity_log_admin ON activity_log(admin_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_target ON activity_log(target_type, target_id);
+    CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id);
+  `);
 }

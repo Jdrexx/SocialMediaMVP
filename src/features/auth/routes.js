@@ -100,5 +100,20 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
 
   router.get('/session', authRequired, (req, res) => res.json({ user: publicUser(req.user) }));
 
+  // ── Change password (authenticated) ──
+
+  router.post('/change-password', authRequired, async (req, res) => {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password required' });
+    if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    if (!(await bcrypt.compare(current_password, user.password_hash))) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    const passwordHash = await bcrypt.hash(new_password, 12);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, user.id);
+    res.json({ ok: true });
+  });
+
   return router;
 }

@@ -28,6 +28,7 @@ export function createApp({ db, jwtSecret, config } = {}) {
   app.use(cookieParser());
   app.use(morgan(runtimeConfig.isProduction ? 'combined' : 'dev'));
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: runtimeConfig.isProduction ? 30 : 100, standardHeaders: true, legacyHeaders: false }));
+  app.use('/api', rateLimit({ windowMs: 60 * 1000, limit: runtimeConfig.isProduction ? 120 : 300, standardHeaders: true, legacyHeaders: false }));
   app.use((req, _res, next) => {
     req.user = getUserFromReq(req, db, secret);
     next();
