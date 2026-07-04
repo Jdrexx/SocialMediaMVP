@@ -210,5 +210,33 @@ export function createModerationRouter({ db }) {
     res.status(201).json({ created: created.length, users: created });
   });
 
+  // ── Admin: create a specific user ──
+
+  router.post('/admin/users', adminRequired, async (req, res) => {
+    const username = String(req.body.username || '').trim();
+    const email = String(req.body.email || '').trim();
+    const password = String(req.body.password || 'Password123!');
+    if (!username || !email) return res.status(400).json({ error: 'Username and email are required' });
+    if (username.length < 3 || username.length > 24) return res.status(400).json({ error: 'Username must be 3-24 characters' });
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ error: 'Username can only contain letters, numbers and underscores' });
+
+    const existing = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
+    if (existing) return res.status(409).json({ error: 'Username or email already taken' });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, passwordHash);
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json({ user: publicUser(user) });
+  });
+
+  // ── Admin: delete a user ──
+
+  router.delete('/admin/users/:id', adminRequired, (req, res) => {
+    if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: 'You cannot delete yourself' });
+    const result = db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    if (!result.changes) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true });
+  });
+
   return router;
 }

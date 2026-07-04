@@ -123,7 +123,7 @@ export default function AdminPage() {
         <StatCard label="Uploads" value={stats.uploadsTotal} />
       </section>
 
-      {/* Seed users */}
+      {/* Seed & Add users */}
       <section className="card seedSection">
         <h2>Seed Users</h2>
         <p className="status">Generate random test users with password <strong>Password123!</strong></p>
@@ -134,6 +134,14 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
+        <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '.5rem 0' }} />
+        <h2>Add User</h2>
+        <form className="inline" onSubmit={(e) => { e.preventDefault(); const f = e.target; adminAct('POST', '/api/admin/users', { username: f.username.value, email: f.email.value, password: f.password.value }); f.reset(); }}>
+          <input name="username" placeholder="Username" required minLength={3} />
+          <input name="email" type="email" placeholder="Email" required />
+          <input name="password" placeholder="Password123!" />
+          <button type="submit">Create</button>
+        </form>
       </section>
 
       {/* Tabs */}
@@ -187,6 +195,9 @@ export default function AdminPage() {
                         </button>
                         <button onClick={() => adminAct('POST', `/api/admin/users/${u.id}/${u.is_suspended ? 'unsuspend' : 'suspend'}`)}>
                           {u.is_suspended ? 'Unsuspend' : 'Suspend'}
+                        </button>
+                        <button className="danger" onClick={() => { if (confirm(`Delete @${u.username}? This cannot be undone.`)) adminAct('DELETE', `/api/admin/users/${u.id}`); }}>
+                          Delete
                         </button>
                       </td>
                     </tr>

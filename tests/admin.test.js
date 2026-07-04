@@ -134,3 +134,38 @@ test('admin can seed random users in batches', async () => {
   const users = await request(app).get('/api/admin/users').set('Cookie', cookie);
   assert.equal(users.body.users.length, 6); // admin(1) + 5 seeded
 });
+
+test('admin can create a specific user manually', async () => {
+  const { app } = setup();
+  const admin = await register(app, 'admin', 'admin@example.com');
+  const cookie = admin.headers['set-cookie'];
+
+  const created = await request(app).post('/api/admin/users').set('Cookie', cookie).send({ username: 'newuser', email: 'new@test.com', password: 'TestPass123!' });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.user.username, 'newuser');
+  assert.equal(created.body.user.email, 'new@test.com');
+
+  const dup = await request(app).post('/api/admin/users').set('Cookie', cookie).send({ username: 'newuser', email: 'other@test.com' });
+  assert.equal(dup.status, 409);
+});
+
+test('admin can delete a user', async () => {
+  const { app } = setup();
+  const admin = await register(app, 'admin', 'admin@example.com');
+  const cookie = admin.headers['set-cookie'];
+  const user = await register(app, 'todelete', 'todelete@test.com');
+
+  const usersBefore = await request(app).get('/api/admin/users').set('Cookie', cookie);
+  const target = usersBefore.body.users.find((u) => u.username === 'todelete');
+  assert.ok(target);
+
+  const deleted = await request(app).delete(`/api/admin/users/${target.id}`).set('Cookie', cookie);
+  assert.equal(deleted.status, 200);
+
+  const usersAfter = await request(app).get('/api/admin/users').set('Cookie', cookie);
+  assert.equal(usersAfter.body.users.length, 1); // only admin remains
+
+  // admin cannot delete self
+  const selfDel = await request(app).delete(`/api/admin/users/1`).set('Cookie', cookie);
+  assert.equal(selfDel.status, 400);
+});
