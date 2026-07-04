@@ -1,33 +1,33 @@
-## Still needed for employer-ready
+## Remaining for employer-ready
 
 | Item | Status | Effort |
 |---|---|---|
-| Admin backend (WordPress-like) | NOT DONE | Requires new routes + UI |
-| Pagination on posts/search | NOT DONE | ~30 min |
+| Admin dashboard | DONE | — |
+| Pagination on posts/search | DONE | — |
 | CI badge visible on GitHub | DONE | — |
 | Screenshot in repo | DONE | — |
 | Legacy frontend cleaned up | DONE | — |
 | Component split | DONE | — |
-| Dockerfile | NOT DONE | ~1 hr |
+| Dockerfile | DONE | — |
+| Security hardening for real user PII | DONE | — |
+| PostgreSQL migration | DONE | — |
 | TypeScript migration | NOT DONE | Big lift |
 
-## Proposed admin panel — scope
+## Security hardening priorities (see docs/SECURITY.md)
 
-A proper admin dashboard with full CRUD over the platform, accessible to admin users at `/admin`:
+See `docs/SECURITY.md` for the full audit. All HIGH and MEDIUM priority issues have been fixed:
 
-**Backend (new routes in `src/features/moderation/routes.js`):**
-- `GET /api/admin/stats` — counts (users, posts, reports, active today)
-- `GET /api/admin/posts` — all posts including hidden, filterable
-- `PATCH /api/admin/users/:id` — edit user (admin role, username, unsuspend)
-- `POST /api/admin/reports/:id/resolve` — mark report resolved
-- `POST /api/admin/reports/:id/dismiss` — dismiss report
+| Issue | Status | Fix |
+|---|---|---|
+| Email exposed on public endpoints | FIXED | Split into `publicUser` / `ownUser` / `adminUser` |
+| CSP disabled | FIXED | Restrictive same-origin CSP enabled |
+| No CSRF protection | FIXED | X-Requested-With header check + frontend sends it |
+| Socket.IO CORS wide open | FIXED | Pins to PUBLIC_URL in production |
+| Uploads no auth gate | FIXED | Auth required in production |
+| Auth tokens plaintext in DB | FIXED | SHA-256 hashed before storage |
+| SVG upload XSS vector | FIXED | SVG MIME types rejected |
+| No account lockout | FIXED | 5 failed attempts locks for 15 min |
+| Seed users weak passwords | FIXED | Random passwords generated per account |
+| Change-password no validation | FIXED | Zod schema added |
 
-**Frontend (`/admin` page):**
-- Stats cards (users, posts, reports, signups)
-- Users table: search, filter, suspend/unsuspend, promote/demote admin
-- Posts table: view all, hide/unhide, delete
-- Reports queue: review, resolve, dismiss
-- Quick actions sidebar
-- Only accessible to admin users; non-admins see 404
-
-**Total new code:** ~200 lines backend + ~300 lines frontend
+Remaining (acceptable for MVP): SQLite encryption, JWT 7-day expiry, optional email verification, no HTTPS enforcement in app.

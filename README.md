@@ -4,6 +4,8 @@
 
 A working full-stack social media platform MVP — Express API, Next.js frontend, real-time chat, WebRTC video calls, and production-hardened auth. Built to be easy to upgrade and deploy.
 
+> **Security assessment available:** See [`docs/SECURITY.md`](docs/SECURITY.md) for the full audit covering PII storage, auth, SQL injection, XSS, CSRF, CSP, and production hardening.
+
 ![Admin Dashboard](tests/admin-stats.png)
 
 ## Features
