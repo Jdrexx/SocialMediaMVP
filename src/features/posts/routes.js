@@ -27,13 +27,15 @@ export function createPostsRouter({ db }) {
         );
         const hasMore = posts.length > limit;
         if (hasMore) posts.pop();
-        return res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at}` : null });
+        const next = hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at.replace(' ', 'T')}` : null;
+        return res.json({ posts, next });
       }
     }
     const posts = getPosts(db, req.user.id, whereBase, params, limit + 1);
     const hasMore = posts.length > limit;
     if (hasMore) posts.pop();
-    res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at}` : null });
+    const next = hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at.replace(' ', 'T')}` : null;
+    res.json({ posts, next });
   });
 
   // ── Public feed ──
@@ -46,7 +48,7 @@ export function createPostsRouter({ db }) {
     if (before) {
       const parts = before.split('_');
       const beforeId = Number(parts[0]);
-      const beforeDate = parts.slice(1).join('_');
+      const beforeDate = parts.slice(1).join('_').replace('T', ' ');
       if (beforeId && beforeDate) {
         params.push(beforeDate, beforeDate, beforeId);
         const posts = getPosts(db, req.user?.id,
@@ -55,13 +57,13 @@ export function createPostsRouter({ db }) {
         );
         const hasMore = posts.length > limit;
         if (hasMore) posts.pop();
-        return res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at}` : null });
+        return res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at.replace(' ', 'T')}` : null });
       }
     }
     const posts = getPosts(db, req.user?.id, '', [], limit + 1);
     const hasMore = posts.length > limit;
     if (hasMore) posts.pop();
-    res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at}` : null });
+    res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at.replace(' ', 'T')}` : null });
   });
 
   // ── Create post ──
