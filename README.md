@@ -1,6 +1,6 @@
 # Social Media MVP
 
-A working full-stack social media platform MVP built to be easy to upgrade and deploy.
+A working full-stack social media platform MVP — Express API, Next.js frontend, real-time chat, WebRTC video calls, and production-hardened auth. Built to be easy to upgrade and deploy.
 
 ## Features
 
@@ -8,30 +8,26 @@ A working full-stack social media platform MVP built to be easy to upgrade and d
 - React/Next.js frontend in the App Router
 - Mobile-friendly responsive UI
 - Email/password auth with HTTP-only JWT cookie sessions
-- Production auth hardening: required strong `JWT_SECRET` in production, secure cookies, `trust proxy`, hidden Express signature, tighter auth rate limits
-- Real SMTP email sending for password reset and email verification when SMTP variables are configured
-- Local dev-token fallback for reset/verification while developing locally
-- Profiles with bio, profile photo, and cover image
-- Uploaded image/video media for posts
-- Likes/unlikes
-- Comments
-- Follow/unfollow
-- Notifications for likes, comments, follows, and messages
+- Production auth hardening: required strong `JWT_SECRET`, secure cookies, `trust proxy`, hidden Express signature, tight rate limits
+- Real SMTP email for password reset and email verification
+- Local dev-token fallback for reset/verification during development
+- Profiles with bio, photo, and cover image
+- Image/video media uploads for posts
+- Likes, comments, follow/unfollow
+- Notifications (likes, comments, follows, messages)
 - User/post search
-- Report posts
-- Admin/moderation dashboard APIs
-- Real-time chat delivery with Socket.IO
-- WebRTC video chat between users using Socket.IO signaling
+- Post reporting and admin moderation dashboard
+- Real-time chat via Socket.IO
+- WebRTC video chat with Socket.IO signaling
 - Typing indicators over WebSockets
-- SSE compatibility endpoint for older realtime clients
-- Authenticated personal feed plus public feed
-- SQLite persistence for local/dev, with production requiring a persistent `DB_FILE` volume before deploy
-- API tests
-- Feature scaffolding helper
+- SSE compatibility for older clients
+- Authenticated personal feed + public feed
+- SQLite for local/dev, persistent volume required for production
+- API tests and feature scaffolding helper
 
-## Run locally
+## Quick Start
 
-Single-server mode, matching Railway production behavior:
+Single-server mode, matching Railway production:
 
 ```bash
 npm install
@@ -41,65 +37,44 @@ npm start
 
 Open: http://localhost:3000
 
-Development mode with separate Next.js hot reload:
-
-Terminal 1:
+Development mode with hot reload:
 
 ```bash
+# Terminal 1
 npm start
-```
-
-Terminal 2:
-
-```bash
+# Terminal 2
 npm run frontend:dev
 ```
 
-Open: http://localhost:3001
+Open: http://localhost:3001 (proxies `/api/*` to port 3000)
 
-The Next.js dev server proxies `/api/*` and `/uploads/*` to the Express backend at `http://localhost:3000`. Set `NEXT_PUBLIC_API_URL` if your API is elsewhere.
+Windows: double-click `run-social-mvp.bat`
 
-On Windows, you can also double-click:
-
-```text
-run-social-mvp.bat
-```
-
-## Test and build
+## Tests
 
 ```bash
 npm test
 npm run frontend:build
 ```
 
-Current verification target: all API tests pass and the Next.js production build succeeds.
+All API tests pass and the Next.js production build succeeds.
 
-## Railway deployment
+## Railway Deployment
 
-Railway config is included in:
+Config in `railway.json`. Full instructions in `docs/RAILWAY_DEPLOYMENT.md`.
 
-```text
-railway.json
-```
-
-Full Railway instructions are in:
-
-```text
-docs/RAILWAY_DEPLOYMENT.md
-```
-
-Minimum Railway variables:
+Minimum env vars:
 
 ```env
 NODE_ENV=production
 JWT_SECRET=<64+ char random secret>
-PUBLIC_URL=https://<your-railway-domain>
+PUBLIC_URL=https://your-domain.com
 DB_FILE=/data/social.sqlite
 ```
 
-Also attach a Railway volume mounted at `/data` so SQLite persists across redeploys.
+Attach a Railway volume at `/data` so SQLite persists across redeploys.
 
-## Environment variables
+## Environment Variables
 
 ```env
 NODE_ENV=production
@@ -112,7 +87,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=resend
 SMTP_PASS=your-smtp-password
-SMTP_FROM="Social Media MVP <no-reply@your-domain.com>"
+SMTP_FROM="Social Media MVP <noreply@your-domain.com>"
 
 NEXT_PUBLIC_API_URL=https://your-api-domain.com
 ```
@@ -123,66 +98,53 @@ Generate a strong secret:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Production startup will fail fast if `JWT_SECRET` is weak or if neither `DB_FILE` nor `DATABASE_URL` is set. The current runtime uses SQLite, so set `DB_FILE` to a persistent mounted volume on Railway/Fly/VPS. A managed PostgreSQL migration is still the recommended next step for high-scale production.
+Production fails fast if `JWT_SECRET` is weak or neither `DB_FILE` nor `DATABASE_URL` is set. Managed PostgreSQL migration is recommended for high scale.
 
-## Upgrade-friendly structure
+## Project Structure
 
-```text
-app/                             # Next.js frontend
-  layout.jsx
-  page.jsx
-  globals.css
+```
+app/                          # Next.js frontend
+├── layout.jsx
+├── page.jsx
+└── globals.css
 src/
-  app.js                         # Small Express setup and feature registration
-  db.js                          # SQLite schema/migrations
-  server.js                      # HTTP + Socket.IO server entrypoint
-  features/
-    index.js                     # Feature registry
-    auth/routes.js               # Auth, SMTP-backed reset, email verification
-    uploads/routes.js            # Media uploads
-    users/routes.js              # Profile/follow/avatar/cover routes
-    posts/routes.js              # Feed/post/like/comment routes
-    notifications/routes.js      # Notifications
-    search/routes.js             # User/post search
-    moderation/routes.js         # Reports and admin moderation
-    messages/routes.js           # Chat/messages and SSE compatibility stream
-  lib/
-    auth.js                      # Shared auth/session helpers
-    email.js                     # Nodemailer SMTP service
-    env.js                       # Runtime config and production guards
-    http.js                      # Shared middleware
-    notifications.js             # Notification helper
-    posts.js                     # Shared post query/serialization helpers
-    realtime.js                  # Socket.IO setup and emit helpers
-    schemas.js                   # Shared request validation schemas
+├── app.js                    # Express setup and feature registration
+├── db.js                     # SQLite schema/migrations
+├── server.js                 # HTTP + Socket.IO entrypoint
+├── features/
+│   ├── index.js              # Feature registry
+│   ├── auth/routes.js        # Auth, password reset, email verification
+│   ├── uploads/routes.js     # Media uploads
+│   ├── users/routes.js       # Profile, follow, avatar, cover
+│   ├── posts/routes.js       # Feed, post, like, comment
+│   ├── notifications/routes.js
+│   ├── search/routes.js
+│   ├── moderation/routes.js  # Reports and admin dashboard
+│   └── messages/routes.js    # Chat, SSE stream
+└── lib/
+    ├── auth.js               # Shared auth/session helpers
+    ├── email.js              # Nodemailer SMTP
+    ├── env.js                # Runtime config and guards
+    ├── http.js               # Shared middleware
+    ├── notifications.js      # Notification helpers
+    ├── posts.js              # Shared post helpers
+    ├── realtime.js           # Socket.IO setup
+    └── schemas.js            # Request validation
 ```
 
-Detailed docs:
+Detailed docs: [Architecture](docs/ARCHITECTURE.md) · [Adding Features](docs/ADDING_FEATURES.md) · [Deployment Readiness](docs/DEPLOYMENT_READY.md)
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Adding Features Guide](docs/ADDING_FEATURES.md)
-- [Deployment Readiness](docs/DEPLOYMENT_READY.md)
-
-## Add a new feature
-
-Create a feature route stub:
+## Adding a Feature
 
 ```bash
 npm run scaffold:feature bookmarks
 ```
 
-Then:
+Then register in `src/features/index.js`, add tests, implement routes, and verify with `npm test && npm run frontend:build`.
 
-1. Register it in `src/features/index.js`.
-2. Add tests in `tests/`.
-3. Add database tables/indexes in `src/db.js` if needed.
-4. Implement routes in `src/features/bookmarks/routes.js`.
-5. Run `npm test` and `npm run frontend:build`.
-
-## API overview
+## API Overview
 
 ### Auth
-
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
@@ -192,42 +154,27 @@ Then:
 - `POST /api/auth/email-verification/request`
 - `POST /api/auth/email-verification/confirm`
 
-### Users/posts/feed
-
-- `GET /api/me`
-- `PATCH /api/me`
-- `POST /api/me/avatar`
-- `POST /api/me/cover`
-- `GET /api/users/:username`
-- `POST /api/users/:username/follow`
-- `GET /api/posts`
-- `GET /api/feed`
-- `POST /api/posts`
-- `DELETE /api/posts/:id`
-- `POST /api/posts/:id/like`
-- `POST /api/posts/:id/comments`
+### Users / Posts / Feed
+- `GET /api/me` · `PATCH /api/me`
+- `POST /api/me/avatar` · `POST /api/me/cover`
+- `GET /api/users/:username` · `POST /api/users/:username/follow`
+- `GET /api/posts` · `GET /api/feed`
+- `POST /api/posts` · `DELETE /api/posts/:id`
+- `POST /api/posts/:id/like` · `POST /api/posts/:id/comments`
 
 ### Feature APIs
-
 - `POST /api/uploads`
-- `GET /api/notifications`
-- `POST /api/notifications/:id/read`
-- `POST /api/notifications/read-all`
+- `GET /api/notifications` · `POST /api/notifications/:id/read` · `POST /api/notifications/read-all`
 - `GET /api/search?q=term`
 - `POST /api/reports/posts/:id`
-- `GET /api/admin/reports`
-- `GET /api/admin/users`
-- `DELETE /api/admin/posts/:id`
-- `POST /api/admin/users/:id/suspend`
-- `GET /api/messages/threads`
-- `GET /api/messages/stream`
-- `GET /api/messages/:username`
-- `POST /api/messages/:username`
+- `GET /api/admin/reports` · `GET /api/admin/users`
+- `DELETE /api/admin/posts/:id` · `POST /api/admin/users/:id/suspend`
+- `GET /api/messages/threads` · `GET /api/messages/stream`
+- `GET /api/messages/:username` · `POST /api/messages/:username`
 
-## MVP notes
+## MVP Notes
 
-- If SMTP is configured, password reset and verification links are sent by email.
-- If SMTP is not configured, the API returns `dev_token` for local development only.
-- The first registered user becomes an admin.
-- Socket.IO now powers realtime message delivery, typing events, and WebRTC video-call signaling.
-- Local uploads and SQLite are fine for MVP demos; production should use persistent storage/backups, and a managed database migration when usage grows.
+- Configured SMTP sends real password reset and verification emails. Without SMTP, the API returns `dev_token` for local dev.
+- First registered user is automatically an admin.
+- Socket.IO powers real-time messages, typing events, and WebRTC video-call signaling.
+- Local uploads and SQLite are fine for demos. Production should use persistent storage, backups, and a managed database.
