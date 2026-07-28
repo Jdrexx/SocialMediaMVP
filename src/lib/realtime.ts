@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Server } from 'socket.io';
 import { getUserFromCookieHeader } from './auth';
 
@@ -28,14 +27,16 @@ export async function attachRealtimeServer(httpServer, { db, jwtSecret }) {
   });
 
   io.on('connection', (socket) => {
-    socket.emit('connected', { ok: true, user_id: socket.user.id });
+    const user = socket.user!;
+    const publicUser = { id: user.id, username: user.username, avatar_url: user.avatar_url };
+    socket.emit('connected', { ok: true, user_id: user.id });
 
     socket.on('typing:start', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('typing:start', { userId: socket.user.id, username: socket.user.username });
+      if (recipientId) socket.to(`user:${recipientId}`).emit('typing:start', { userId: user.id, username: user.username });
     });
 
     socket.on('typing:stop', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('typing:stop', { userId: socket.user.id, username: socket.user.username });
+      if (recipientId) socket.to(`user:${recipientId}`).emit('typing:stop', { userId: user.id, username: user.username });
     });
 
     socket.on('video:call', ({ recipientId } = {}, ack) => {
@@ -44,32 +45,32 @@ export async function attachRealtimeServer(httpServer, { db, jwtSecret }) {
         ack?.({ ok: false, error: 'Recipient is unavailable' });
         return;
       }
-      io.to(`user:${recipient.id}`).emit('video:incoming', { caller: publicCallUser(socket.user) });
+      io.to(`user:${recipient.id}`).emit('video:incoming', { caller: publicUser });
       ack?.({ ok: true, recipient: publicCallUser(recipient) });
     });
 
     socket.on('video:accept', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('video:accepted', { by: publicCallUser(socket.user) });
+      if (recipientId) socket.to(`user:${recipientId}`).emit('video:accepted', { by: publicUser });
     });
 
     socket.on('video:reject', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('video:rejected', { by: publicCallUser(socket.user) });
+      if (recipientId) socket.to(`user:${recipientId}`).emit('video:rejected', { by: publicUser });
     });
 
     socket.on('video:end', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('video:ended', { by: publicCallUser(socket.user) });
+      if (recipientId) socket.to(`user:${recipientId}`).emit('video:ended', { by: publicUser });
     });
 
     socket.on('webrtc:offer', ({ recipientId, description } = {}) => {
-      if (recipientId && description) socket.to(`user:${recipientId}`).emit('webrtc:offer', { from: publicCallUser(socket.user), description });
+      if (recipientId && description) socket.to(`user:${recipientId}`).emit('webrtc:offer', { from: publicUser, description });
     });
 
     socket.on('webrtc:answer', ({ recipientId, description } = {}) => {
-      if (recipientId && description) socket.to(`user:${recipientId}`).emit('webrtc:answer', { from: publicCallUser(socket.user), description });
+      if (recipientId && description) socket.to(`user:${recipientId}`).emit('webrtc:answer', { from: publicUser, description });
     });
 
     socket.on('webrtc:ice-candidate', ({ recipientId, candidate } = {}) => {
-      if (recipientId && candidate) socket.to(`user:${recipientId}`).emit('webrtc:ice-candidate', { from: publicCallUser(socket.user), candidate });
+      if (recipientId && candidate) socket.to(`user:${recipientId}`).emit('webrtc:ice-candidate', { from: publicUser, candidate });
     });
   });
 

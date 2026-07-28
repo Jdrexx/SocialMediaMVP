@@ -1,4 +1,3 @@
-// @ts-nocheck
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import rateLimit from 'express-rate-limit';

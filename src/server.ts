@@ -1,4 +1,3 @@
-// @ts-nocheck
 import http from 'node:http';
 import next from 'next';
 import { createApp } from './app';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Schema initialization and migrations — supports both SQLite and PostgreSQL.
  */

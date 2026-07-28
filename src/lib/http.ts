@@ -1,4 +1,3 @@
-// @ts-nocheck
 // In-memory login attempt tracking (per email, reset on restart — acceptable for MVP)
 const LOGIN_ATTEMPTS = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;

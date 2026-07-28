@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Database from 'better-sqlite3';
 import pg from 'pg';
 
@@ -52,7 +51,7 @@ function createSQLiteDatabase(dbPath) {
     },
 
     hasColumn(table, column) {
-      return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
+      return (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((row) => row.name === column);
     },
 
     addColumn(table, column, definition) {
@@ -73,7 +72,7 @@ function createPostgresDatabase(connectionString) {
   const impl = {
     _type: 'postgres',
     _pool: pool,
-    _txClient: null,
+    _txClient: null as pg.PoolClient | null,
 
     async get(sql, ...params) {
       const { text, values } = convertPlaceholders(sql, params);
@@ -100,7 +99,7 @@ function createPostgresDatabase(connectionString) {
       const result = await client.query(text, values);
       return {
         changes: result.rowCount,
-        lastInsertRowid: result.rows[0]?.id || null
+        lastInsertRowid: (result.rows[0] as { id?: number } | undefined)?.id ?? null
       };
     },
 
