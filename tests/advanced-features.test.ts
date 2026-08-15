@@ -53,13 +53,14 @@ test('searches users and posts', async () => {
   const alice = await register(app, 'alice_search', 'alice@example.com');
   await request(app).post('/api/posts').set('Cookie', alice.headers['set-cookie']).send({ body: 'Learning SQLite search' });
 
-  const res = await request(app).get('/api/search?q=sqlite');
+  const res = await request(app).get('/api/search?q=sqlite').set('Cookie', alice.headers['set-cookie']);
   assert.equal(res.status, 200);
   assert.equal(res.body.posts[0].body, 'Learning SQLite search');
 
-  const users = await request(app).get('/api/search?q=alice_search');
+  await register(app, 'bob_search', 'bob@example.com');
+  const users = await request(app).get('/api/search?q=bob_search').set('Cookie', alice.headers['set-cookie']);
   assert.equal(users.status, 200);
-  assert.equal(users.body.users[0].username, 'alice_search');
+  assert.equal(users.body.users[0].username, 'bob_search');
 });
 
 test('supports password reset and email verification token flows', async () => {
@@ -107,8 +108,12 @@ test('first registered user can moderate reports and remove posts', async () => 
 test('sends chat messages and exposes stream endpoint for realtime clients', async () => {
   const { app } = setup();
   const alice = await register(app, 'alice', 'alice@example.com');
-  await register(app, 'bob', 'bob@example.com');
+  const bob = await register(app, 'bob', 'bob@example.com');
   const aliceCookie = alice.headers['set-cookie'];
+  const bobCookie = bob.headers['set-cookie'];
+
+  const connection = await request(app).post('/api/connections/bob/request').set('Cookie', aliceCookie);
+  await request(app).post(`/api/connections/${connection.body.id}/respond`).set('Cookie', bobCookie).send({ action: 'accept' });
 
   const sent = await request(app).post('/api/messages/bob').set('Cookie', aliceCookie).send({ body: 'Hello Bob' });
   assert.equal(sent.status, 201);

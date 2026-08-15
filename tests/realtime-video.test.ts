@@ -8,6 +8,7 @@ import { createApp } from '../src/app';
 import { createDatabase } from '../src/lib/database';
 import { createTables } from '../src/db';
 import { attachRealtimeServer } from '../src/lib/realtime';
+import { registrationPayload } from './helper';
 
 function once(socket, event) {
   return new Promise((resolve) => socket.once(event, resolve));
@@ -27,7 +28,7 @@ async function setupRealtime() {
 }
 
 async function register(app, username, email) {
-  const res = await request(app).post('/api/auth/register').send({ username, email, password: 'Password123!' });
+  const res = await request(app).post('/api/auth/register').send(registrationPayload(username, email));
   assert.equal(res.status, 201);
   return { user: res.body.user, cookie: res.headers['set-cookie'].map((cookie) => cookie.split(';')[0]).join('; ') };
 }
@@ -45,6 +46,8 @@ test('Socket.IO relays video-call and WebRTC signaling events between users', as
   const { app, server, io, url } = await setupRealtime();
   const alice = await register(app, 'alice_video', 'alice_video@example.com');
   const bob = await register(app, 'bob_video', 'bob_video@example.com');
+  const connection = await request(app).post('/api/connections/bob_video/request').set('Cookie', alice.cookie);
+  await request(app).post(`/api/connections/${connection.body.id}/respond`).set('Cookie', bob.cookie).send({ action: 'accept' });
   const aliceSocket = connect(url, alice.cookie);
   const bobSocket = connect(url, bob.cookie);
 

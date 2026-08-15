@@ -3,6 +3,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'node:path';
 import { registerFeatures } from './features/index';
 import { getUserFromReq } from './lib/auth';
 import { createEmailService } from './lib/email';
@@ -35,24 +36,22 @@ export function createApp({ db, jwtSecret, config }: any = {}) {
     }
   }));
   app.use(express.json({ limit: '1mb' }));
-  app.use(express.static('public', { index: false }));
   app.use(cookieParser());
   app.use(morgan(runtimeConfig.isProduction ? 'combined' : 'dev'));
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: runtimeConfig.isProduction ? 30 : 100, standardHeaders: true, legacyHeaders: false }));
   app.use('/api', rateLimit({ windowMs: 60 * 1000, limit: runtimeConfig.isProduction ? 120 : 300, standardHeaders: true, legacyHeaders: false }));
   // CSRF protection for all API state-changing requests
   app.use('/api', csrfProtection);
-  // Auth gate for uploads (production only — dev mode allows access)
-  app.use('/uploads', uploadsAuth);
   app.use((req, _res, next) => {
     Promise.resolve(getUserFromReq(req, db, secret))
       .then(user => { req.user = user; next(); })
       .catch(next);
   });
+  app.use('/uploads', uploadsAuth, express.static(path.resolve(runtimeConfig.uploadDir), { index: false, fallthrough: false }));
 
   app.get('/api/health', (_req, res) => res.json({
     ok: true,
-    features: ['auth', 'uploads', 'users', 'posts', 'notifications', 'search', 'moderation', 'messages'],
+    features: ['auth', 'uploads', 'users', 'connections', 'posts', 'notifications', 'search', 'moderation', 'messages'],
     email: { configured: email.enabled },
     realtime: { transport: 'socket.io', capabilities: ['messages', 'typing', 'video-call-signaling'] },
     production: runtimeConfig.isProduction

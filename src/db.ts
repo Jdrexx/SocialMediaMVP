@@ -4,7 +4,7 @@
 export function createTables(db) {
   const isPG = db._type === 'postgres';
 
-  db.exec(`
+  const schemaSql = `
     CREATE TABLE IF NOT EXISTS users (
       id ${isPG ? 'SERIAL' : 'INTEGER'} PRIMARY KEY,
       username ${isPG ? 'VARCHAR(255)' : 'TEXT'} NOT NULL UNIQUE${isPG ? '' : ' COLLATE NOCASE'},
@@ -16,6 +16,9 @@ export function createTables(db) {
       email_verified ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
       is_admin ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
       is_suspended ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
+      onboarding_complete ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
+      two_factor_enabled ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
+      mfa_secret ${isPG ? 'TEXT' : 'TEXT'},
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -121,6 +124,43 @@ export function createTables(db) {
       CONSTRAINT blocks_no_self CHECK (blocker_id != blocked_id)
     );
 
+    CREATE TABLE IF NOT EXISTS member_profiles (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      relationship_status ${isPG ? 'VARCHAR(40)' : 'TEXT'} NOT NULL DEFAULT 'prefer_not_to_say',
+      connection_intents TEXT NOT NULL DEFAULT '[]',
+      experience_tags TEXT NOT NULL DEFAULT '[]',
+      city ${isPG ? 'VARCHAR(100)' : 'TEXT'} NOT NULL DEFAULT '',
+      region ${isPG ? 'VARCHAR(100)' : 'TEXT'} NOT NULL DEFAULT '',
+      postal_code ${isPG ? 'VARCHAR(16)' : 'TEXT'} NOT NULL DEFAULT '',
+      search_radius_miles INTEGER NOT NULL DEFAULT 25,
+      discoverable ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 1,
+      show_relationship_status ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
+      show_experience_tags ${isPG ? 'SMALLINT' : 'INTEGER'} NOT NULL DEFAULT 0,
+      presence_status ${isPG ? 'VARCHAR(20)' : 'TEXT'} NOT NULL DEFAULT 'offline',
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS user_consents (
+      id ${isPG ? 'SERIAL' : 'INTEGER'} PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      consent_type ${isPG ? 'VARCHAR(80)' : 'TEXT'} NOT NULL,
+      document_version ${isPG ? 'VARCHAR(40)' : 'TEXT'} NOT NULL,
+      accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      withdrawn_at TIMESTAMP,
+      UNIQUE (user_id, consent_type, document_version)
+    );
+
+    CREATE TABLE IF NOT EXISTS connections (
+      id ${isPG ? 'SERIAL' : 'INTEGER'} PRIMARY KEY,
+      requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status ${isPG ? 'VARCHAR(20)' : 'TEXT'} NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (requester_id, recipient_id),
+      CONSTRAINT connections_no_self CHECK (requester_id != recipient_id)
+    );
+
     CREATE TABLE IF NOT EXISTS activity_log (
       id ${isPG ? 'SERIAL' : 'INTEGER'} PRIMARY KEY,
       admin_id ${isPG ? 'INTEGER' : 'INTEGER'} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -130,7 +170,7 @@ export function createTables(db) {
       details ${isPG ? 'TEXT' : 'TEXT'} NOT NULL DEFAULT '',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-  `);
+  `;
 
   // Indexes (shared syntax)
   const indexes = [
@@ -145,7 +185,30 @@ export function createTables(db) {
     'CREATE INDEX IF NOT EXISTS idx_activity_log_target ON activity_log(target_type, target_id)',
     'CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id, created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id)',
+    'CREATE INDEX IF NOT EXISTS idx_member_profiles_location ON member_profiles(region, city)',
+    'CREATE INDEX IF NOT EXISTS idx_connections_requester ON connections(requester_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_connections_recipient ON connections(recipient_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_user_consents_user ON user_consents(user_id, consent_type)',
   ];
+
+  if (isPG) {
+    return (async () => {
+      await db.exec(schemaSql);
+      await db.exec(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete SMALLINT NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled SMALLINT NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret TEXT;
+      `);
+      for (const idx of indexes) await db.exec(idx);
+      await db.exec(`
+        INSERT INTO member_profiles (user_id)
+        SELECT users.id FROM users
+        WHERE NOT EXISTS (SELECT 1 FROM member_profiles WHERE member_profiles.user_id = users.id)
+      `);
+    })();
+  }
+
+  db.exec(schemaSql);
   for (const idx of indexes) {
     db.exec(idx);
   }
@@ -156,10 +219,18 @@ export function createTables(db) {
     addColumnIfMissing(db, 'users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
     addColumnIfMissing(db, 'users', 'is_admin', 'INTEGER NOT NULL DEFAULT 0');
     addColumnIfMissing(db, 'users', 'is_suspended', 'INTEGER NOT NULL DEFAULT 0');
+    addColumnIfMissing(db, 'users', 'onboarding_complete', 'INTEGER NOT NULL DEFAULT 0');
+    addColumnIfMissing(db, 'users', 'two_factor_enabled', 'INTEGER NOT NULL DEFAULT 0');
+    addColumnIfMissing(db, 'users', 'mfa_secret', 'TEXT');
     addColumnIfMissing(db, 'posts', 'media_id', 'INTEGER REFERENCES media(id) ON DELETE SET NULL');
     addColumnIfMissing(db, 'posts', 'is_hidden', 'INTEGER NOT NULL DEFAULT 0');
     addColumnIfMissing(db, 'posts', 'edited', 'INTEGER NOT NULL DEFAULT 0');
     addColumnIfMissing(db, 'posts', 'updated_at', 'TEXT');
+    db.run(`
+      INSERT INTO member_profiles (user_id)
+      SELECT users.id FROM users
+      WHERE NOT EXISTS (SELECT 1 FROM member_profiles WHERE member_profiles.user_id = users.id)
+    `);
   }
 }
 

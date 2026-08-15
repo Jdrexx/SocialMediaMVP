@@ -15,6 +15,9 @@ declare global {
         email_verified: number;
         is_admin: number;
         is_suspended: number;
+        onboarding_complete: number;
+        two_factor_enabled: number;
+        mfa_secret?: string | null;
         password_hash: string;
         created_at: string;
       } | null;
@@ -35,6 +38,9 @@ declare module 'socket.io' {
       email_verified: number;
       is_admin: number;
       is_suspended: number;
+      onboarding_complete: number;
+      two_factor_enabled: number;
+      mfa_secret?: string | null;
       password_hash: string;
       created_at: string;
     } | null;

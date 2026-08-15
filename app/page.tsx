@@ -13,10 +13,12 @@ import Feed from '../components/Feed';
 import SearchPanel from '../components/SearchPanel';
 import NotificationsPanel from '../components/NotificationsPanel';
 import ChatPanel from '../components/ChatPanel';
+import MemberOnboarding from '../components/MemberOnboarding';
 
 export default function Home() {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('');
+  const [verification, setVerification] = useState(null);
   const [posts, setPosts] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [notifications, setNotifications] = useState([]);
@@ -48,9 +50,10 @@ export default function Home() {
     setNotifications(data.notifications || []);
   }, [signedIn]);
 
-  async function handleLogin(loggedInUser) {
+  async function handleLogin(loggedInUser, verificationResult = null) {
     setUser(loggedInUser);
-    await loadFeed();
+    setVerification(verificationResult);
+    if (loggedInUser.onboarding_complete) await loadFeed();
   }
 
   async function logout() {
@@ -79,12 +82,14 @@ export default function Home() {
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read_at).length, [notifications]);
 
   useEffect(() => {
-    api('/api/auth/session').then((data) => setUser(data.user)).catch(() => null);
-    loadFeed().catch(() => null);
+    api('/api/auth/session').then((data) => {
+      setUser(data.user);
+      if (data.user.onboarding_complete) loadFeed().catch(() => null);
+    }).catch(() => null);
   }, [loadFeed]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.onboarding_complete) return;
     loadNotifications().catch(() => null);
     const API = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
     const socket = io(API, { withCredentials: true });
@@ -109,9 +114,9 @@ export default function Home() {
     <main className="shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">Next.js + Express social platform</p>
-          <h1>Social Media MVP</h1>
-          <p>Post updates, upload media, video chat, message friends in real time, manage your profile, and moderate community reports.</p>
+          <p className="eyebrow">Person-to-person mental health community</p>
+          <h1>MySazz</h1>
+          <p>Your place to share your story, build genuine connections, and find support without stigma or judgment.</p>
         </div>
         {user ? (
           <div className="profileCard">
@@ -128,8 +133,17 @@ export default function Home() {
 
       {!signedIn ? (
         <AuthForm onLogin={handleLogin} />
+      ) : !user.onboarding_complete ? (
+        <MemberOnboarding onComplete={(completedUser) => { setUser(completedUser); loadFeed().catch(() => null); }} />
       ) : (
         <>
+          {!user.email_verified && (
+            <section className="noticeCard" role="status">
+              <strong>Verify your email</strong>
+              <span>Check your inbox before relying on MySazz member features.</span>
+              {verification?.dev_token && <a href={`/verify-email?token=${encodeURIComponent(verification.dev_token)}`}>Verify this development account</a>}
+            </section>
+          )}
           <div className="dashboard">
             <ProfileCard user={user} onUserUpdate={setUser} />
             <PostComposer onPostCreated={(newPosts) => { setPosts(newPosts); setNextCursor(null); }} posts={posts} />

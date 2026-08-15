@@ -5,12 +5,27 @@ function publicCallUser(user) {
   return { id: user.id, username: user.username, avatar_url: user.avatar_url };
 }
 
-function getRecipient(db, recipientId) {
+async function getRecipient(db, senderId, recipientId) {
   if (!recipientId) return null;
-  return db.get('SELECT id, username, avatar_url, is_suspended FROM users WHERE id = ?', Number(recipientId));
+  return await db.get(`
+    SELECT users.id, users.username, users.avatar_url, users.is_suspended
+    FROM users
+    WHERE users.id = ? AND users.is_suspended = 0
+      AND EXISTS (
+        SELECT 1 FROM connections
+        WHERE connections.status = 'accepted'
+          AND ((connections.requester_id = ? AND connections.recipient_id = users.id)
+            OR (connections.requester_id = users.id AND connections.recipient_id = ?))
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM blocks
+        WHERE (blocks.blocker_id = ? AND blocks.blocked_id = users.id)
+           OR (blocks.blocker_id = users.id AND blocks.blocked_id = ?)
+      )
+  `, Number(recipientId), senderId, senderId, senderId, senderId);
 }
 
-export async function attachRealtimeServer(httpServer, { db, jwtSecret }) {
+export async function attachRealtimeServer(httpServer, { db, jwtSecret, config = null as any }) {
   const io = new Server(httpServer, {
     cors: {
       origin: process.env.PUBLIC_URL || true,
@@ -20,7 +35,9 @@ export async function attachRealtimeServer(httpServer, { db, jwtSecret }) {
 
   io.use(async (socket, next) => {
     const user = await getUserFromCookieHeader(socket.handshake.headers.cookie, db, jwtSecret);
-    if (!user || user.is_suspended) return next(new Error('Unauthorized'));
+    if (!user || user.is_suspended || !user.onboarding_complete || (config?.requireEmailVerification && !user.email_verified)) {
+      return next(new Error('Unauthorized'));
+    }
     socket.user = user;
     socket.join(`user:${user.id}`);
     next();
@@ -31,17 +48,19 @@ export async function attachRealtimeServer(httpServer, { db, jwtSecret }) {
     const publicUser = { id: user.id, username: user.username, avatar_url: user.avatar_url };
     socket.emit('connected', { ok: true, user_id: user.id });
 
-    socket.on('typing:start', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('typing:start', { userId: user.id, username: user.username });
+    socket.on('typing:start', async ({ recipientId } = {}) => {
+      const recipient = await getRecipient(db, user.id, recipientId);
+      if (recipient) socket.to(`user:${recipient.id}`).emit('typing:start', { userId: user.id, username: user.username });
     });
 
-    socket.on('typing:stop', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('typing:stop', { userId: user.id, username: user.username });
+    socket.on('typing:stop', async ({ recipientId } = {}) => {
+      const recipient = await getRecipient(db, user.id, recipientId);
+      if (recipient) socket.to(`user:${recipient.id}`).emit('typing:stop', { userId: user.id, username: user.username });
     });
 
-    socket.on('video:call', ({ recipientId } = {}, ack) => {
-      const recipient = getRecipient(db, recipientId);
-      if (!recipient || recipient.is_suspended) {
+    socket.on('video:call', async ({ recipientId } = {}, ack) => {
+      const recipient = await getRecipient(db, user.id, recipientId);
+      if (!recipient) {
         ack?.({ ok: false, error: 'Recipient is unavailable' });
         return;
       }
@@ -49,28 +68,34 @@ export async function attachRealtimeServer(httpServer, { db, jwtSecret }) {
       ack?.({ ok: true, recipient: publicCallUser(recipient) });
     });
 
-    socket.on('video:accept', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('video:accepted', { by: publicUser });
+    socket.on('video:accept', async ({ recipientId } = {}) => {
+      const recipient = await getRecipient(db, user.id, recipientId);
+      if (recipient) socket.to(`user:${recipient.id}`).emit('video:accepted', { by: publicUser });
     });
 
-    socket.on('video:reject', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('video:rejected', { by: publicUser });
+    socket.on('video:reject', async ({ recipientId } = {}) => {
+      const recipient = await getRecipient(db, user.id, recipientId);
+      if (recipient) socket.to(`user:${recipient.id}`).emit('video:rejected', { by: publicUser });
     });
 
-    socket.on('video:end', ({ recipientId } = {}) => {
-      if (recipientId) socket.to(`user:${recipientId}`).emit('video:ended', { by: publicUser });
+    socket.on('video:end', async ({ recipientId } = {}) => {
+      const recipient = await getRecipient(db, user.id, recipientId);
+      if (recipient) socket.to(`user:${recipient.id}`).emit('video:ended', { by: publicUser });
     });
 
-    socket.on('webrtc:offer', ({ recipientId, description } = {}) => {
-      if (recipientId && description) socket.to(`user:${recipientId}`).emit('webrtc:offer', { from: publicUser, description });
+    socket.on('webrtc:offer', async ({ recipientId, description } = {}) => {
+      const recipient = description ? await getRecipient(db, user.id, recipientId) : null;
+      if (recipient) socket.to(`user:${recipient.id}`).emit('webrtc:offer', { from: publicUser, description });
     });
 
-    socket.on('webrtc:answer', ({ recipientId, description } = {}) => {
-      if (recipientId && description) socket.to(`user:${recipientId}`).emit('webrtc:answer', { from: publicUser, description });
+    socket.on('webrtc:answer', async ({ recipientId, description } = {}) => {
+      const recipient = description ? await getRecipient(db, user.id, recipientId) : null;
+      if (recipient) socket.to(`user:${recipient.id}`).emit('webrtc:answer', { from: publicUser, description });
     });
 
-    socket.on('webrtc:ice-candidate', ({ recipientId, candidate } = {}) => {
-      if (recipientId && candidate) socket.to(`user:${recipientId}`).emit('webrtc:ice-candidate', { from: publicUser, candidate });
+    socket.on('webrtc:ice-candidate', async ({ recipientId, candidate } = {}) => {
+      const recipient = candidate ? await getRecipient(db, user.id, recipientId) : null;
+      if (recipient) socket.to(`user:${recipient.id}`).emit('webrtc:ice-candidate', { from: publicUser, candidate });
     });
   });
 

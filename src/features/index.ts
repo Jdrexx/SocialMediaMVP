@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createAuthRouter } from './auth/routes';
+import { createConnectionsRouter } from './connections/routes';
 import { createMessagesRouter } from './messages/routes';
 import { createModerationRouter } from './moderation/routes';
 import { createNotificationsRouter } from './notifications/routes';
@@ -12,6 +13,7 @@ export const featureRegistry = [
   { name: 'auth', mountPath: '/api/auth', createRouter: createAuthRouter },
   { name: 'uploads', mountPath: '/api', createRouter: createUploadsRouter },
   { name: 'users', mountPath: '/api', createRouter: createUsersRouter },
+  { name: 'connections', mountPath: '/api', createRouter: createConnectionsRouter },
   { name: 'posts', mountPath: '/api', createRouter: createPostsRouter },
   { name: 'notifications', mountPath: '/api', createRouter: createNotificationsRouter },
   { name: 'search', mountPath: '/api', createRouter: createSearchRouter },

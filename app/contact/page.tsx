@@ -7,13 +7,13 @@ export default function ContactPage() {
         <div>
           <p className="eyebrow">Contact</p>
           <h1>Contact</h1>
-          <p>Reach out with questions, support requests, business inquiries, or feedback about the social media platform.</p>
+          <p>Reach out with membership questions, safety concerns, partnership inquiries, or feedback about MySazz.</p>
         </div>
       </section>
       <section className="card infoCard">
         <h2>Get in touch</h2>
-        <p>Email: <a href="mailto:support@example.com">support@example.com</a></p>
-        <p>For urgent safety or moderation issues, include the username, post, or message details so the team can review quickly.</p>
+        <p>Email: <a href="mailto:support@mysazz.com">support@mysazz.com</a></p>
+        <p>For moderation issues, use the in-product reporting controls where possible. Do not email passwords, diagnoses, medical records, or unnecessary personal details.</p>
       </section>
     </main>
   );

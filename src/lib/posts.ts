@@ -1,12 +1,18 @@
 // @ts-nocheck
-export async function serializePost(row, db) {
+export async function serializePost(row, db, viewerId = 0) {
   const comments = await db.all(`
     SELECT comments.*, users.username, users.avatar_url
     FROM comments JOIN users ON users.id = comments.user_id
     WHERE comments.post_id = ?
+      AND users.is_suspended = 0
+      AND NOT EXISTS (
+        SELECT 1 FROM blocks
+        WHERE (blocks.blocker_id = ? AND blocks.blocked_id = comments.user_id)
+           OR (blocks.blocker_id = comments.user_id AND blocks.blocked_id = ?)
+      )
     ORDER BY comments.created_at ASC
     LIMIT 20
-  `, row.id);
+  `, row.id, viewerId, viewerId);
 
   const mediaUrl = row.media_url || row.image_url || '';
   return {
@@ -26,10 +32,16 @@ export async function getPosts(db, viewerId, whereSql = '', params = [], limit =
     FROM posts
     JOIN users ON users.id = posts.user_id
     LEFT JOIN media ON media.id = posts.media_id
-    ${whereSql ? `${whereSql} AND posts.is_hidden = 0` : 'WHERE posts.is_hidden = 0'}
+    ${whereSql ? `${whereSql} AND` : 'WHERE'} posts.is_hidden = 0
+      AND users.is_suspended = 0
+      AND NOT EXISTS (
+        SELECT 1 FROM blocks
+        WHERE (blocks.blocker_id = ? AND blocks.blocked_id = posts.user_id)
+           OR (blocks.blocker_id = posts.user_id AND blocks.blocked_id = ?)
+      )
     ORDER BY posts.created_at DESC, posts.id DESC
     LIMIT ?
-  `, viewerId ?? 0, ...params, limit);
+  `, viewerId ?? 0, ...params, viewerId ?? 0, viewerId ?? 0, limit);
 
-  return await Promise.all(rows.map((row) => serializePost(row, db)));
+  return await Promise.all(rows.map((row) => serializePost(row, db, viewerId ?? 0)));
 }

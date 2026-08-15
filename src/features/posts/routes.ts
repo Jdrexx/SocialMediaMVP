@@ -1,16 +1,23 @@
 // @ts-nocheck
 import express from 'express';
-import { authRequired } from '../../lib/http';
+import { memberRequired } from '../../lib/http';
 import { createNotification } from '../../lib/notifications';
 import { getPosts } from '../../lib/posts';
 import { commentSchema, postSchema } from '../../lib/schemas';
+import { isBlockedEitherWay } from '../../lib/membership';
 
 export function createPostsRouter({ db }) {
   const router = express.Router();
 
+  async function visiblePost(req, id) {
+    const post = await db.get('SELECT * FROM posts WHERE id = ? AND is_hidden = 0', id);
+    if (!post || await isBlockedEitherWay(db, req.user.id, post.user_id)) return null;
+    return post;
+  }
+
   // ── Feed (authenticated, follows-based) ──
 
-  router.get('/feed', authRequired, async (req, res) => {
+  router.get('/feed', memberRequired, async (req, res) => {
     const before = req.query.before;
     const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
     const params = [req.user.id, req.user.id];
@@ -41,7 +48,7 @@ export function createPostsRouter({ db }) {
 
   // ── Public feed ──
 
-  router.get('/posts', async (req, res) => {
+  router.get('/posts', memberRequired, async (req, res) => {
     const before = req.query.before;
     const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
     const params: any[] = [];
@@ -61,7 +68,7 @@ export function createPostsRouter({ db }) {
         return res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at.replace(' ', 'T')}` : null });
       }
     }
-    const posts = await getPosts(db, req.user?.id, '', [], limit + 1);
+    const posts = await getPosts(db, req.user.id, '', [], limit + 1);
     const hasMore = posts.length > limit;
     if (hasMore) posts.pop();
     res.json({ posts, next: hasMore ? `${posts[posts.length - 1].id}_${posts[posts.length - 1].created_at.replace(' ', 'T')}` : null });
@@ -69,7 +76,7 @@ export function createPostsRouter({ db }) {
 
   // ── Create post ──
 
-  router.post('/posts', authRequired, async (req, res) => {
+  router.post('/posts', memberRequired, async (req, res) => {
     const parsed = postSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
@@ -79,14 +86,14 @@ export function createPostsRouter({ db }) {
       if (!media) return res.status(400).json({ error: 'Media not found' });
     }
 
-    const result = db.run('INSERT INTO posts (user_id, body, image_url, media_id) VALUES (?, ?, ?, ?)', req.user.id, parsed.data.body, parsed.data.image_url || '', mediaId);
+    const result = await db.run('INSERT INTO posts (user_id, body, image_url, media_id) VALUES (?, ?, ?, ?)', req.user.id, parsed.data.body, parsed.data.image_url || '', mediaId);
     const post = (await getPosts(db, req.user.id, 'WHERE posts.id = ?', [result.lastInsertRowid], 1))[0];
     res.status(201).json({ post });
   });
 
   // ── Edit post ──
 
-  router.patch('/posts/:id', authRequired, async (req, res) => {
+  router.patch('/posts/:id', memberRequired, async (req, res) => {
     const post = await db.get('SELECT * FROM posts WHERE id = ?', req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
     if (post.user_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own posts' });
@@ -99,7 +106,7 @@ export function createPostsRouter({ db }) {
 
   // ── Delete post ──
 
-  router.delete('/posts/:id', authRequired, async (req, res) => {
+  router.delete('/posts/:id', memberRequired, async (req, res) => {
     const post = await db.get('SELECT * FROM posts WHERE id = ?', req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
     if (post.user_id !== req.user.id) return res.status(403).json({ error: 'You can only delete your own posts' });
@@ -109,8 +116,8 @@ export function createPostsRouter({ db }) {
 
   // ── Like / unlike ──
 
-  router.post('/posts/:id/like', authRequired, async (req, res) => {
-    const post = await db.get('SELECT id, user_id FROM posts WHERE id = ?', req.params.id);
+  router.post('/posts/:id/like', memberRequired, async (req, res) => {
+    const post = await visiblePost(req, req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
 
     const existing = await db.get('SELECT 1 FROM likes WHERE user_id = ? AND post_id = ?', req.user.id, post.id);
@@ -119,48 +126,49 @@ export function createPostsRouter({ db }) {
       return res.json({ liked: false });
     }
 
-    db.run('INSERT INTO likes (user_id, post_id) VALUES (?, ?)', req.user.id, post.id);
-    createNotification(db, { userId: post.user_id, actorId: req.user.id, type: 'like', entityType: 'post', entityId: post.id, body: `${req.user.username} liked your post` });
+    await db.run('INSERT INTO likes (user_id, post_id) VALUES (?, ?)', req.user.id, post.id);
+    await createNotification(db, { userId: post.user_id, actorId: req.user.id, type: 'like', entityType: 'post', entityId: post.id, body: `${req.user.username} liked your post` });
     res.json({ liked: true });
   });
 
   // ── Comment ──
 
-  router.post('/posts/:id/comments', authRequired, async (req, res) => {
+  router.post('/posts/:id/comments', memberRequired, async (req, res) => {
     const parsed = commentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-    const post = await db.get('SELECT id, user_id FROM posts WHERE id = ?', req.params.id);
+    const post = await visiblePost(req, req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
 
-    const result = db.run('INSERT INTO comments (user_id, post_id, body) VALUES (?, ?, ?)', req.user.id, post.id, parsed.data.body);
+    const result = await db.run('INSERT INTO comments (user_id, post_id, body) VALUES (?, ?, ?)', req.user.id, post.id, parsed.data.body);
     const comment = await db.get(`
       SELECT comments.*, users.username, users.avatar_url
       FROM comments JOIN users ON users.id = comments.user_id
       WHERE comments.id = ?
     `, result.lastInsertRowid);
 
-    createNotification(db, { userId: post.user_id, actorId: req.user.id, type: 'comment', entityType: 'post', entityId: post.id, body: `${req.user.username} commented: ${parsed.data.body}` });
+    await createNotification(db, { userId: post.user_id, actorId: req.user.id, type: 'comment', entityType: 'post', entityId: post.id, body: `${req.user.username} commented on your story` });
     res.status(201).json({ comment });
   });
 
   // ── Bookmarks ──
 
-  router.post('/bookmarks/:postId', authRequired, async (req, res) => {
+  router.post('/bookmarks/:postId', memberRequired, async (req, res) => {
     const postId = Number(req.params.postId);
-    const post = await db.get('SELECT id FROM posts WHERE id = ?', postId);
+    const post = await visiblePost(req, postId);
     if (!post) return res.status(404).json({ error: 'Post not found' });
     const existing = await db.get('SELECT 1 FROM bookmarks WHERE user_id = ? AND post_id = ?', req.user.id, post.id);
     if (existing) {
       await db.run('DELETE FROM bookmarks WHERE user_id = ? AND post_id = ?', req.user.id, post.id);
       return res.json({ bookmarked: false });
     }
-    db.run('INSERT INTO bookmarks (user_id, post_id) VALUES (?, ?)', req.user.id, post.id);
+    await db.run('INSERT INTO bookmarks (user_id, post_id) VALUES (?, ?)', req.user.id, post.id);
     res.json({ bookmarked: true });
   });
 
-  router.get('/bookmarks', authRequired, async (req, res) => {
-    const postIds = await db.all('SELECT post_id FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC', req.user.id).map((r) => r.post_id);
+  router.get('/bookmarks', memberRequired, async (req, res) => {
+    const bookmarkRows = await db.all('SELECT post_id FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC', req.user.id);
+    const postIds = bookmarkRows.map((r) => r.post_id);
     if (postIds.length === 0) return res.json({ posts: [] });
     const placeholder = postIds.map(() => '?').join(',');
     const posts = await getPosts(db, req.user.id, `WHERE posts.id IN (${placeholder})`, postIds, 100);
@@ -171,7 +179,7 @@ export function createPostsRouter({ db }) {
 
   // ── Block / unblock user ──
 
-  router.post('/blocks/:userId', authRequired, async (req, res) => {
+  router.post('/blocks/:userId', memberRequired, async (req, res) => {
     const userId = Number(req.params.userId);
     if (userId === req.user.id) return res.status(400).json({ error: 'You cannot block yourself' });
     const target = await db.get('SELECT id FROM users WHERE id = ?', userId);
@@ -181,11 +189,13 @@ export function createPostsRouter({ db }) {
       await db.run('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?', req.user.id, target.id);
       return res.json({ blocked: false });
     }
-    db.run('INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)', req.user.id, target.id);
+    await db.run('INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)', req.user.id, target.id);
+    await db.run('DELETE FROM follows WHERE (follower_id = ? AND following_id = ?) OR (follower_id = ? AND following_id = ?)', req.user.id, target.id, target.id, req.user.id);
+    await db.run('DELETE FROM connections WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)', req.user.id, target.id, target.id, req.user.id);
     res.json({ blocked: true });
   });
 
-  router.get('/blocks', authRequired, async (req, res) => {
+  router.get('/blocks', memberRequired, async (req, res) => {
     const blocked = await db.all(`
       SELECT users.id, users.username, users.avatar_url, blocks.created_at
       FROM blocks JOIN users ON users.id = blocks.blocked_id

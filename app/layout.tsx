@@ -1,7 +1,7 @@
 // @ts-nocheck
 export const metadata = {
-  title: 'Social Media MVP',
-  description: 'A modular full-stack social media platform MVP'
+  title: 'MySazz — Your story. Your connections.',
+  description: 'A private, stigma-free community for adults moving forward with lived experience.'
 };
 
 import './globals.css';

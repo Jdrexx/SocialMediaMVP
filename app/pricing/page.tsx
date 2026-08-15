@@ -1,9 +1,9 @@
 // @ts-nocheck
 export default function PricingPage() {
   const plans = [
-    { name: 'Free', price: '$0', details: 'Create an account, post updates, upload media, and message other members.' },
-    { name: 'Community Pro', price: 'Coming soon', details: 'Future premium features for creators, groups, analytics, and enhanced media tools.' },
-    { name: 'Business', price: 'Contact us', details: 'Options for branded communities, moderation support, and custom integrations.' }
+    { name: 'Founding membership', price: '$5 / month', details: 'Planned introductory access to profiles, connections, member stories, private chat, and video.' },
+    { name: 'Sponsored membership', price: '$0', details: 'Planned donor-supported access for qualifying members. Safety and crisis resources will never require payment.' },
+    { name: 'Support MySazz', price: 'Donate', details: 'Help fund moderated community access and trustworthy resource navigation for people with lived experience.' }
   ];
 
   return (
@@ -13,7 +13,7 @@ export default function PricingPage() {
         <div>
           <p className="eyebrow">Pricing</p>
           <h1>Pricing</h1>
-          <p>Simple starter pricing for the MVP, with room to add premium plans as the platform grows.</p>
+          <p>Low-cost access with a commitment to keep safety information and resource discovery open to everyone.</p>
         </div>
       </section>
       <section className="pricingGrid">

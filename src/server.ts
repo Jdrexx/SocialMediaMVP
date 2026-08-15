@@ -10,11 +10,11 @@ const config = getRuntimeConfig();
 
 // Create database — auto-detects SQLite vs PostgreSQL from connection string
 const db = createDatabase(config.databaseUrl || config.dbFile);
-createTables(db);
+await createTables(db);
 
 const app = createApp({ db, config });
 const server = http.createServer(app);
-const io = attachRealtimeServer(server, { db, jwtSecret: config.jwtSecret });
+const io = await attachRealtimeServer(server, { db, jwtSecret: config.jwtSecret, config });
 app.locals.context.io = io;
 
 async function registerNextFrontend() {
@@ -28,7 +28,7 @@ async function registerNextFrontend() {
 await registerNextFrontend();
 
 server.listen(config.port, () => {
-  console.log(`Social media MVP running at http://localhost:${config.port}`);
+  console.log(`MySazz Community running at http://localhost:${config.port}`);
   console.log(`Database: ${db._type === 'postgres' ? 'PostgreSQL' : 'SQLite'}`);
   console.log(`Frontend: ${process.env.SERVE_NEXT === 'false' ? 'disabled' : 'Next.js served by Express'}`);
   console.log(`Email sending: ${app.locals.context.email.enabled ? 'configured' : 'dev-token fallback'}`);

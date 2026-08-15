@@ -7,7 +7,7 @@ function resetHtml({ username, link }) {
 }
 
 function verifyHtml({ username, link }) {
-  return `<p>Hi ${username},</p><p>Verify your email address for Social Media MVP:</p><p><a href="${link}">${link}</a></p><p>This link expires in 24 hours.</p>`;
+  return `<p>Hi ${username},</p><p>Verify your email address for MySazz:</p><p><a href="${link}">${link}</a></p><p>This link expires in 24 hours.</p>`;
 }
 
 export function createEmailService(config) {
@@ -35,7 +35,7 @@ export function createEmailService(config) {
       const link = `${config.publicUrl}/reset-password?token=${encodeURIComponent(token)}`;
       return sendMail({
         to: user.email,
-        subject: 'Reset your Social Media MVP password',
+        subject: 'Reset your MySazz password',
         text: `Reset your password: ${link}`,
         html: resetHtml({ username: user.username, link })
       });
@@ -44,7 +44,7 @@ export function createEmailService(config) {
       const link = `${config.publicUrl}/verify-email?token=${encodeURIComponent(token)}`;
       return sendMail({
         to: user.email,
-        subject: 'Verify your Social Media MVP email',
+        subject: 'Verify your MySazz email',
         text: `Verify your email: ${link}`,
         html: verifyHtml({ username: user.username, link })
       });

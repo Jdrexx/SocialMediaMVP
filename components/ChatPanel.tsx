@@ -141,6 +141,20 @@ export default function ChatPanel({
     setChatBody('');
   }
 
+  async function reportMessage(message) {
+    try {
+      await api(`/api/reports/messages/${message.id}`, { method: 'POST', body: JSON.stringify({ reason: 'Member requested a safety review of this message' }) });
+      setCallStatus('Message sent to the MySazz safety team for review.');
+    } catch (error) {
+      setCallStatus(error.message);
+    }
+  }
+
+  useEffect(() => {
+    if (chatUser) openThread(chatUser).catch((error) => setCallStatus(error.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatUser]);
+
   // Wire video-call socket events
   useEffect(() => {
     const socket = socketRef.current;
@@ -204,20 +218,14 @@ export default function ChatPanel({
 
   return (
     <section className="card chatPanel">
-      <h2>Messages + Video</h2>
-      <form onSubmit={(e) => { e.preventDefault(); openThread(); }} className="inline">
-        <input
-          placeholder="Username"
-          value={chatUser}
-          onChange={(e) => setChatUser(e.target.value)}
-        />
-        <button>Open</button>
-      </form>
+      <h2>Private conversation</h2>
+      <p className="status">{chatPeer ? `Connected with @${chatPeer.username}` : 'Choose an accepted connection to begin messaging or video chat.'}</p>
       <div className="messages">
         {messages.map((m) => (
-          <p key={m.id} className={m.sender_id === user.id ? 'mine' : ''}>
-            <b>{m.sender_username}:</b> {m.body}
-          </p>
+          <div key={m.id} className={`messageBubble ${m.sender_id === user.id ? 'mine' : ''}`}>
+            <p><b>{m.sender_username}:</b> {m.body}</p>
+            {m.sender_id !== user.id && <button type="button" className="textButton" onClick={() => reportMessage(m)}>Report</button>}
+          </div>
         ))}
         <span className="typing">{typing}</span>
       </div>

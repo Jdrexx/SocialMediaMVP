@@ -4,7 +4,9 @@ export default function NavLinks() {
     { href: '/about-us', label: 'About Us', description: 'Learn who we are' },
     { href: '/contact', label: 'Contact', description: 'Get in touch' },
     { href: '/rules-of-conduct', label: 'Rules Of Conduct', description: 'Community guidelines' },
-    { href: '/pricing', label: 'Pricing', description: 'View plans and options' }
+    { href: '/resources', label: 'Get Help', description: 'Immediate and local resources' },
+    { href: '/pricing', label: 'Membership', description: 'Plans and sponsored access' },
+    { href: '/privacy', label: 'Privacy', description: 'How MySazz protects you' }
   ];
 
   return (

@@ -23,8 +23,11 @@ Set these in Railway service variables:
 ```env
 NODE_ENV=production
 JWT_SECRET=<generate-a-long-random-secret-at-least-32-chars>
+DATA_ENCRYPTION_KEY=<generate-an-independent-64-character-hex-key>
 PUBLIC_URL=https://<your-railway-domain>
 DB_FILE=/data/social.sqlite
+UPLOAD_DIR=/data/uploads
+ADMIN_EMAILS=owner@your-domain.com
 ```
 
 Generate a secret locally:
@@ -48,6 +51,7 @@ The app still uses SQLite, so production needs persistent disk.
 
 ```env
 DB_FILE=/data/social.sqlite
+UPLOAD_DIR=/data/uploads
 ```
 
 Without this, Railway's ephemeral filesystem can lose the database on redeploys.
@@ -62,7 +66,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=your-smtp-user
 SMTP_PASS=your-smtp-password
-SMTP_FROM="Social Media MVP <no-reply@yourdomain.com>"
+SMTP_FROM="MySazz <no-reply@yourdomain.com>"
 ```
 
 If SMTP is not configured, local/dev endpoints return `dev_token`. Do not rely on `dev_token` for public production use.
@@ -111,5 +115,5 @@ Then open the Railway domain root `/` and verify the Next.js frontend loads.
 ## 8. Known MVP production limitations
 
 - SQLite with a Railway volume is fine for a single-instance MVP; PostgreSQL is recommended for higher traffic or multi-instance scaling.
-- Uploaded files currently save to `public/uploads`; for long-term production, move uploads to Cloudflare R2, S3, UploadThing, or another object store.
+- Set `UPLOAD_DIR=/data/uploads` on the persistent volume. Files are served through an authenticated route; for multi-instance production, use signed URLs from Cloudflare R2, S3, UploadThing, or another object store.
 - Socket.IO is single-instance by default; if scaling horizontally, add the Redis adapter.

@@ -41,7 +41,10 @@ Minimum production variables:
 NODE_ENV=production
 PUBLIC_URL=https://your-domain.com
 JWT_SECRET=<64-char-random-secret>
+DATA_ENCRYPTION_KEY=<independent-64-char-hex-key>
 DB_FILE=/data/social.sqlite
+UPLOAD_DIR=/data/uploads
+ADMIN_EMAILS=owner@your-domain.com
 ```
 
 Email variables for real verification/reset messages:
@@ -52,7 +55,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=resend
 SMTP_PASS=<your-password-or-api-key>
-SMTP_FROM="Social Media MVP <no-reply@your-domain.com>"
+SMTP_FROM="MySazz <no-reply@your-domain.com>"
 ```
 
 Next.js frontend variable:
@@ -66,26 +69,26 @@ NEXT_PUBLIC_API_URL=https://your-api-domain.com
 For a simple first deploy:
 
 1. Deploy the Express API from this repo.
-2. Add a persistent volume and set `DB_FILE=/data/social.sqlite`.
-3. Set `NODE_ENV=production`, `PUBLIC_URL`, and a strong `JWT_SECRET`.
+2. Add a persistent volume and set `DB_FILE=/data/social.sqlite` and `UPLOAD_DIR=/data/uploads`.
+3. Set `NODE_ENV=production`, `PUBLIC_URL`, strong independent `JWT_SECRET` and `DATA_ENCRYPTION_KEY` values, and `ADMIN_EMAILS`.
 4. Add SMTP variables from Resend/Mailgun/Postmark.
 5. Deploy the Next.js frontend as a second Railway service or deploy it to Vercel with `NEXT_PUBLIC_API_URL` pointing at the Railway API.
 
 ## Production database note
 
-The runtime currently uses `better-sqlite3`, which is reliable for a small MVP if the database file lives on persistent disk and is backed up. For multi-instance/high-traffic production, migrate to PostgreSQL before horizontal scaling.
+The runtime supports SQLite and an initial PostgreSQL query-wrapper path. SQLite is reliable for a small MVP if the database file lives on persistent disk and is backed up. The PostgreSQL path still requires live integration, migration, concurrency, backup, and rollback validation before it should carry production member data.
 
 Recommended next migration:
 
-- Add Railway PostgreSQL.
-- Introduce Prisma or Drizzle.
+- Add Railway PostgreSQL and a staging database.
+- Introduce versioned migrations (optionally through Prisma or Drizzle).
 - Move schema from `src/db.js` into database migrations.
-- Convert route DB calls from synchronous `better-sqlite3` calls to async ORM/query calls.
+- Validate every route and concurrent write path against PostgreSQL.
 - Run import/export migration from `social.sqlite` into PostgreSQL.
 
 ## Upload storage note
 
-Uploads currently go to `public/uploads`. This is acceptable for a single-instance MVP with persistent disk. For production, move media to object storage such as Cloudflare R2, S3, or UploadThing.
+Uploads go to the private `UPLOAD_DIR` directory and are served only through an authenticated route. Set `UPLOAD_DIR=/data/uploads` when using a persistent Railway volume. Object storage with signed URLs remains the recommended upgrade for multi-instance production deployments.
 
 ## Video chat note
 

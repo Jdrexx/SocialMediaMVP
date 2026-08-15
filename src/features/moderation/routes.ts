@@ -2,47 +2,74 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
-import { adminRequired, authRequired } from '../../lib/http';
+import { adminRequired, memberRequired } from '../../lib/http';
 import { publicUser, adminUser } from '../../lib/auth';
 import { reportSchema } from '../../lib/schemas';
 import { logAdminAction } from '../../lib/audit';
+import { isBlockedEitherWay } from '../../lib/membership';
 
 export function createModerationRouter({ db }) {
   const router = express.Router();
 
   function audit(req, action, targetType, targetId, details = '') {
-    logAdminAction(db, { adminId: req.user.id, action, targetType, targetId, details });
+    return logAdminAction(db, { adminId: req.user.id, action, targetType, targetId, details });
+  }
+
+  async function count(sql, ...params) {
+    const row = await db.get(sql, ...params);
+    return Number(row?.c || 0);
   }
 
   // ── Reports (user-facing) ──
 
-  router.post('/reports/posts/:id', authRequired, async (req, res) => {
+  router.post('/reports/posts/:id', memberRequired, async (req, res) => {
     const parsed = reportSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const post = await db.get('SELECT id FROM posts WHERE id = ?', req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
-    const result = db.run('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)', req.user.id, 'post', post.id, parsed.data.reason);
+    const post = await db.get('SELECT id, user_id FROM posts WHERE id = ?', req.params.id);
+    if (!post || await isBlockedEitherWay(db, req.user.id, post.user_id)) return res.status(404).json({ error: 'Post not found' });
+    const result = await db.run('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)', req.user.id, 'post', post.id, parsed.data.reason);
+    res.status(201).json({ report: await db.get('SELECT * FROM reports WHERE id = ?', result.lastInsertRowid) });
+  });
+
+  router.post('/reports/users/:id', memberRequired, async (req, res) => {
+    const parsed = reportSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const target = await db.get('SELECT id FROM users WHERE id = ? AND is_suspended = 0', req.params.id);
+    if (!target || target.id === req.user.id) return res.status(404).json({ error: 'User not found' });
+    const result = await db.run('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)', req.user.id, 'user', target.id, parsed.data.reason);
+    res.status(201).json({ report: await db.get('SELECT * FROM reports WHERE id = ?', result.lastInsertRowid) });
+  });
+
+  router.post('/reports/messages/:id', memberRequired, async (req, res) => {
+    const parsed = reportSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const message = await db.get('SELECT id FROM messages WHERE id = ? AND (sender_id = ? OR recipient_id = ?)', req.params.id, req.user.id, req.user.id);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    const result = await db.run('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)', req.user.id, 'message', message.id, parsed.data.reason);
     res.status(201).json({ report: await db.get('SELECT * FROM reports WHERE id = ?', result.lastInsertRowid) });
   });
 
   // ── Admin: dashboard stats ──
 
   router.get('/admin/stats', adminRequired, async (_req, res) => {
-    const users = await db.get('SELECT COUNT(*) AS c FROM users').c;
-    const admins = await db.get('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1').c;
-    const suspended = await db.get('SELECT COUNT(*) AS c FROM users WHERE is_suspended = 1').c;
-    const blocked = await db.get('SELECT COUNT(*) AS c FROM blocks').c;
-    const posts = await db.get('SELECT COUNT(*) AS c FROM posts').c;
-    const hiddenPosts = await db.get('SELECT COUNT(*) AS c FROM posts WHERE is_hidden = 1').c;
-    const reportsOpen = await db.get("SELECT COUNT(*) AS c FROM reports WHERE status = 'open'").c;
-    const reportsResolved = await db.get("SELECT COUNT(*) AS c FROM reports WHERE status = 'resolved'").c;
-    const reportsDismissed = await db.get("SELECT COUNT(*) AS c FROM reports WHERE status = 'dismissed'").c;
-    const commentsTotal = await db.get('SELECT COUNT(*) AS c FROM comments').c;
-    const messagesTotal = await db.get('SELECT COUNT(*) AS c FROM messages').c;
-    const followsTotal = await db.get('SELECT COUNT(*) AS c FROM follows').c;
-    const uploadsTotal = await db.get('SELECT COUNT(*) AS c FROM media').c;
-    const bookmarksTotal = await db.get('SELECT COUNT(*) AS c FROM bookmarks').c;
-    const auditLogTotal = await db.get('SELECT COUNT(*) AS c FROM activity_log').c;
+    const [users, admins, suspended, blocked, posts, hiddenPosts, reportsOpen, reportsResolved,
+      reportsDismissed, commentsTotal, messagesTotal, followsTotal, uploadsTotal, bookmarksTotal, auditLogTotal] = await Promise.all([
+      count('SELECT COUNT(*) AS c FROM users'),
+      count('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1'),
+      count('SELECT COUNT(*) AS c FROM users WHERE is_suspended = 1'),
+      count('SELECT COUNT(*) AS c FROM blocks'),
+      count('SELECT COUNT(*) AS c FROM posts'),
+      count('SELECT COUNT(*) AS c FROM posts WHERE is_hidden = 1'),
+      count("SELECT COUNT(*) AS c FROM reports WHERE status = 'open'"),
+      count("SELECT COUNT(*) AS c FROM reports WHERE status = 'resolved'"),
+      count("SELECT COUNT(*) AS c FROM reports WHERE status = 'dismissed'"),
+      count('SELECT COUNT(*) AS c FROM comments'),
+      count('SELECT COUNT(*) AS c FROM messages'),
+      count('SELECT COUNT(*) AS c FROM follows'),
+      count('SELECT COUNT(*) AS c FROM media'),
+      count('SELECT COUNT(*) AS c FROM bookmarks'),
+      count('SELECT COUNT(*) AS c FROM activity_log')
+    ]);
 
     res.json({
       users, admins, suspended, blocked,
@@ -106,7 +133,7 @@ export function createModerationRouter({ db }) {
     const body = String(req.body.body ?? post.body).trim();
     if (!body) return res.status(400).json({ error: 'Post body cannot be empty' });
     await db.run('UPDATE posts SET body = ?, edited = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', body, post.id);
-    audit(req, 'edit_post', 'post', post.id, `Body edited by admin`);
+    await audit(req, 'edit_post', 'post', post.id, `Body edited by admin`);
     res.json({ ok: true });
   });
 
@@ -146,7 +173,7 @@ export function createModerationRouter({ db }) {
     const isAdmin = req.body.is_admin !== undefined ? (req.body.is_admin ? 1 : 0) : user.is_admin;
     const isSuspended = req.body.is_suspended !== undefined ? (req.body.is_suspended ? 1 : 0) : user.is_suspended;
 
-    db.run('UPDATE users SET username = ?, email = ?, bio = ?, is_admin = ?, is_suspended = ? WHERE id = ?',
+    await db.run('UPDATE users SET username = ?, email = ?, bio = ?, is_admin = ?, is_suspended = ? WHERE id = ?',
       username, email, bio, isAdmin, isSuspended, user.id);
 
     const updated = await db.get('SELECT * FROM users WHERE id = ?', user.id);
@@ -155,7 +182,7 @@ export function createModerationRouter({ db }) {
     if (email !== user.email) changed.push('email');
     if (Number(isAdmin) !== user.is_admin) changed.push(`is_admin:${isAdmin ? 'promote' : 'demote'}`);
     if (Number(isSuspended) !== user.is_suspended) changed.push(`suspend:${isSuspended}`);
-    audit(req, 'edit_user', 'user', user.id, changed.join(', '));
+    await audit(req, 'edit_user', 'user', user.id, changed.join(', '));
 
     res.json({ user: adminUser(updated) });
   });
@@ -166,14 +193,14 @@ export function createModerationRouter({ db }) {
     if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: 'You cannot suspend yourself' });
     const result = await db.run('UPDATE users SET is_suspended = 1 WHERE id = ?', req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'User not found' });
-    audit(req, 'suspend_user', 'user', Number(req.params.id));
+    await audit(req, 'suspend_user', 'user', Number(req.params.id));
     res.json({ ok: true, suspended: true });
   });
 
   router.post('/admin/users/:id/unsuspend', adminRequired, async (req, res) => {
     const result = await db.run('UPDATE users SET is_suspended = 0 WHERE id = ?', req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'User not found' });
-    audit(req, 'unsuspend_user', 'user', Number(req.params.id));
+    await audit(req, 'unsuspend_user', 'user', Number(req.params.id));
     res.json({ ok: true, suspended: false });
   });
 
@@ -193,14 +220,14 @@ export function createModerationRouter({ db }) {
   router.post('/admin/reports/:id/resolve', adminRequired, async (req, res) => {
     const result = await db.run("UPDATE reports SET status = 'resolved' WHERE id = ?", req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'Report not found' });
-    audit(req, 'resolve_report', 'report', Number(req.params.id));
+    await audit(req, 'resolve_report', 'report', Number(req.params.id));
     res.json({ ok: true, status: 'resolved' });
   });
 
   router.post('/admin/reports/:id/dismiss', adminRequired, async (req, res) => {
     const result = await db.run("UPDATE reports SET status = 'dismissed' WHERE id = ?", req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'Report not found' });
-    audit(req, 'dismiss_report', 'report', Number(req.params.id));
+    await audit(req, 'dismiss_report', 'report', Number(req.params.id));
     res.json({ ok: true, status: 'dismissed' });
   });
 
@@ -211,7 +238,7 @@ export function createModerationRouter({ db }) {
     if (!post) return res.status(404).json({ error: 'Post not found' });
     await db.run('UPDATE posts SET is_hidden = 1 WHERE id = ?', post.id);
     await db.run("UPDATE reports SET status = 'resolved' WHERE target_type = 'post' AND target_id = ?", post.id);
-    audit(req, 'hide_post', 'post', post.id);
+    await audit(req, 'hide_post', 'post', post.id);
     res.json({ ok: true, hidden: true });
   });
 
@@ -219,7 +246,7 @@ export function createModerationRouter({ db }) {
     const post = await db.get('SELECT id FROM posts WHERE id = ?', req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
     await db.run('UPDATE posts SET is_hidden = 0 WHERE id = ?', post.id);
-    audit(req, 'unhide_post', 'post', post.id);
+    await audit(req, 'unhide_post', 'post', post.id);
     res.json({ ok: true, hidden: false });
   });
 
@@ -231,49 +258,44 @@ export function createModerationRouter({ db }) {
     if (ids.length > 100) return res.status(400).json({ error: 'Max 100 items per bulk action' });
     let done = 0;
 
-    // Transaction callback must be sync for better-sqlite3 compatibility.
-    // db.run/db.get inside are synchronous for SQLite (no await needed).
-    const tx = db.transaction(() => {
-      for (const id of ids) {
+    for (const id of ids) {
         if (action === 'hide_posts') {
-          db.run('UPDATE posts SET is_hidden = 1 WHERE id = ?', id);
-          audit(req, 'bulk_hide_posts', 'post', id);
+          await db.run('UPDATE posts SET is_hidden = 1 WHERE id = ?', id);
+          await audit(req, 'bulk_hide_posts', 'post', id);
           done++;
         } else if (action === 'unhide_posts') {
-          db.run('UPDATE posts SET is_hidden = 0 WHERE id = ?', id);
-          audit(req, 'bulk_unhide_posts', 'post', id);
+          await db.run('UPDATE posts SET is_hidden = 0 WHERE id = ?', id);
+          await audit(req, 'bulk_unhide_posts', 'post', id);
           done++;
         } else if (action === 'suspend_users') {
           if (Number(id) !== req.user.id) {
-            db.run('UPDATE users SET is_suspended = 1 WHERE id = ?', id);
-            audit(req, 'bulk_suspend_users', 'user', id);
+            await db.run('UPDATE users SET is_suspended = 1 WHERE id = ?', id);
+            await audit(req, 'bulk_suspend_users', 'user', id);
             done++;
           }
         } else if (action === 'unsuspend_users') {
-          db.run('UPDATE users SET is_suspended = 0 WHERE id = ?', id);
-          audit(req, 'bulk_unsuspend_users', 'user', id);
+          await db.run('UPDATE users SET is_suspended = 0 WHERE id = ?', id);
+          await audit(req, 'bulk_unsuspend_users', 'user', id);
           done++;
         } else if (action === 'resolve_reports') {
-          db.run("UPDATE reports SET status = 'resolved' WHERE id = ?", id);
-          audit(req, 'bulk_resolve_reports', 'report', id);
+          await db.run("UPDATE reports SET status = 'resolved' WHERE id = ?", id);
+          await audit(req, 'bulk_resolve_reports', 'report', id);
           done++;
         } else if (action === 'delete_users') {
           if (Number(id) !== req.user.id) {
-            db.run('DELETE FROM users WHERE id = ?', id);
-            audit(req, 'bulk_delete_users', 'user', id);
+            await audit(req, 'bulk_delete_users', 'user', id);
+            await db.run('DELETE FROM users WHERE id = ?', id);
             done++;
           }
         } else if (action === 'delete_posts') {
-          const post = db.get('SELECT id FROM posts WHERE id = ?', id);
+          const post = await db.get('SELECT id FROM posts WHERE id = ?', id);
           if (post) {
-            db.run('DELETE FROM posts WHERE id = ?', id);
-            audit(req, 'bulk_delete_posts', 'post', id);
+            await db.run('DELETE FROM posts WHERE id = ?', id);
+            await audit(req, 'bulk_delete_posts', 'post', id);
             done++;
           }
         }
       }
-    });
-    tx();
     res.json({ ok: true, action, processed: done, total: ids.length });
   });
 
@@ -300,21 +322,19 @@ export function createModerationRouter({ db }) {
         username = randomUsername();
         email = `${username.toLowerCase()}@seed.test`;
         attempts++;
-      } while (attempts < 20 && db.get('SELECT 1 FROM users WHERE username = ? OR email = ?', username, email));
+      } while (attempts < 20 && await db.get('SELECT 1 FROM users WHERE username = ? OR email = ?', username, email));
       if (attempts >= 20) continue;
       password = crypto.randomBytes(4).toString('hex') + 'Aa1!';
       seeds.push({ username, email, passwordHash: bcrypt.hashSync(password, 10), password });
     }
 
     const created: any[] = [];
-    const tx = db.transaction(() => {
-      for (const s of seeds) {
-        db.run('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', s.username, s.email, s.passwordHash);
-        created.push({ username: s.username, email: s.email, password: s.password });
-      }
-    });
-    tx();
-    audit(req, 'seed_users', 'user', 0, `Seeded ${created.length} users`);
+    for (const s of seeds) {
+      const result = await db.run('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', s.username, s.email, s.passwordHash);
+      await db.run('INSERT INTO member_profiles (user_id) VALUES (?)', result.lastInsertRowid);
+      created.push({ username: s.username, email: s.email, password: s.password });
+    }
+    await audit(req, 'seed_users', 'user', 0, `Seeded ${created.length} users`);
     res.status(201).json({ created: created.length, users: created });
   });
 
@@ -332,9 +352,10 @@ export function createModerationRouter({ db }) {
     if (existing) return res.status(409).json({ error: 'Username or email already taken' });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const result = db.run('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', username, email, passwordHash);
+    const result = await db.run('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', username, email, passwordHash);
     const user = await db.get('SELECT * FROM users WHERE id = ?', result.lastInsertRowid);
-    audit(req, 'create_user', 'user', user.id, `Created by admin`);
+    await db.run('INSERT INTO member_profiles (user_id) VALUES (?)', user.id);
+    await audit(req, 'create_user', 'user', user.id, `Created by admin`);
     res.status(201).json({ user: adminUser(user) });
   });
 
@@ -344,7 +365,7 @@ export function createModerationRouter({ db }) {
     if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: 'You cannot delete yourself' });
     const result = await db.run('DELETE FROM users WHERE id = ?', req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'User not found' });
-    audit(req, 'delete_user', 'user', Number(req.params.id));
+    await audit(req, 'delete_user', 'user', Number(req.params.id));
     res.json({ ok: true });
   });
 

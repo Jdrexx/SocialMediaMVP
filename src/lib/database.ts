@@ -13,7 +13,8 @@ export function createDatabase(connectionString) {
   if (connectionString.startsWith('postgres://') || connectionString.startsWith('postgresql://')) {
     return createPostgresDatabase(connectionString);
   }
-  return createSQLiteDatabase(':memory:');
+  // DB_FILE is normally a plain filesystem path such as /data/social.sqlite.
+  return createSQLiteDatabase(connectionString);
 }
 
 // ── SQLite Implementation ──
@@ -91,7 +92,12 @@ function createPostgresDatabase(connectionString) {
     async run(sql, ...params) {
       let queryText = sql;
       const isInsert = /^\s*INSERT/i.test(sql);
-      if (isInsert && !/RETURNING/i.test(sql)) {
+      const tableName = /^\s*INSERT\s+INTO\s+([a-z_][a-z0-9_]*)/i.exec(sql)?.[1]?.toLowerCase();
+      const tablesWithGeneratedId = new Set([
+        'users', 'media', 'posts', 'comments', 'notifications', 'auth_tokens',
+        'reports', 'messages', 'activity_log', 'user_consents', 'connections'
+      ]);
+      if (isInsert && tableName && tablesWithGeneratedId.has(tableName) && !/RETURNING/i.test(sql)) {
         queryText = sql.replace(/;\s*$/, '') + ' RETURNING id';
       }
       const { text, values } = convertPlaceholders(queryText, params);

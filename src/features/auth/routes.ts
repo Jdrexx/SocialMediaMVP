@@ -1,9 +1,12 @@
 // @ts-nocheck
 import bcrypt from 'bcryptjs';
 import express from 'express';
-import { createToken, hashToken, ownUser, publicUser, setAuthCookie, signToken } from '../../lib/auth';
+import { createToken, hashToken, setAuthCookie, signToken } from '../../lib/auth';
+import { decryptSensitive, encryptSensitive } from '../../lib/crypto';
 import { authRequired } from '../../lib/http';
-import { changePasswordSchema, emailSchema, loginSchema, registerSchema, resetConfirmSchema, tokenSchema } from '../../lib/schemas';
+import { ownMember, recordRequiredConsents } from '../../lib/membership';
+import { createTotpSecret, totpUri, verifyTotp } from '../../lib/totp';
+import { changePasswordSchema, disableMfaSchema, emailSchema, loginSchema, mfaCodeSchema, registerSchema, resetConfirmSchema, tokenSchema } from '../../lib/schemas';
 import { checkLoginRate, recordLoginAttempt } from '../../lib/http';
 
 function futureDate(minutes) {
@@ -26,18 +29,40 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
     const existing = await db.get('SELECT id FROM users WHERE username = ? OR email = ?', username, userEmail);
     if (existing) return res.status(409).json({ error: 'Username or email is already taken' });
 
-    const userCount = await db.get('SELECT COUNT(*) AS c FROM users').c;
+    const userCountRow = await db.get('SELECT COUNT(*) AS c FROM users');
+    const userCount = Number(userCountRow?.c || 0);
     const passwordHash = await bcrypt.hash(password, 12);
-    const result = db.run('INSERT INTO users (username, email, password_hash, is_admin) VALUES (?, ?, ?, ?)', username, userEmail, passwordHash, userCount === 0 ? 1 : 0);
+    const configuredAdmin = config.adminEmails.includes(userEmail.toLowerCase());
+    const isAdmin = configuredAdmin || (config.allowFirstUserAdmin && userCount === 0);
+    const result = await db.run(
+      'INSERT INTO users (username, email, password_hash, is_admin, onboarding_complete) VALUES (?, ?, ?, ?, 1)',
+      username,
+      userEmail,
+      passwordHash,
+      isAdmin ? 1 : 0
+    );
     const user = await db.get('SELECT * FROM users WHERE id = ?', result.lastInsertRowid);
+
+    await db.run(`
+      INSERT INTO member_profiles
+        (user_id, relationship_status, connection_intents, experience_tags, city, region)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    user.id,
+    parsed.data.relationship_status,
+    JSON.stringify(parsed.data.connection_intents),
+    JSON.stringify(parsed.data.experience_tags),
+    parsed.data.city,
+    parsed.data.region);
+    await recordRequiredConsents(db, user.id);
 
     const verifyToken = createToken();
     const verifyTokenHash = hashToken(verifyToken);
-    db.run('INSERT INTO auth_tokens (user_id, type, token, expires_at) VALUES (?, ?, ?, ?)', user.id, 'email_verify', verifyTokenHash, futureDate(24 * 60));
+    await db.run('INSERT INTO auth_tokens (user_id, type, token, expires_at) VALUES (?, ?, ?, ?)', user.id, 'email_verify', verifyTokenHash, futureDate(24 * 60));
     const sendResult = await email.sendEmailVerification(user, verifyToken);
 
     setAuthCookie(res, signToken(user, jwtSecret), { secure: config.cookieSecure });
-    res.status(201).json({ user: ownUser(user), verification: emailResponse(sendResult, verifyToken) });
+    res.status(201).json({ user: await ownMember(db, user), verification: emailResponse(sendResult, verifyToken) });
   });
 
   router.post('/login', async (req, res) => {
@@ -56,9 +81,20 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    if (user.two_factor_enabled) {
+      if (!parsed.data.mfa_code) {
+        return res.status(202).json({ mfa_required: true, message: 'Enter the code from your authenticator app' });
+      }
+      const secret = decryptSensitive(user.mfa_secret, config.dataEncryptionKey);
+      if (!verifyTotp(secret, parsed.data.mfa_code)) {
+        recordLoginAttempt(parsed.data.email, false);
+        return res.status(401).json({ error: 'Invalid authenticator code' });
+      }
+    }
+
     recordLoginAttempt(parsed.data.email, true);
     setAuthCookie(res, signToken(user, jwtSecret), { secure: config.cookieSecure });
-    res.json({ user: ownUser(user) });
+    res.json({ user: await ownMember(db, user) });
   });
 
   router.post('/logout', (_req, res) => {
@@ -74,7 +110,7 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
 
     const token = createToken();
     const tokenHash = hashToken(token);
-    db.run('INSERT INTO auth_tokens (user_id, type, token, expires_at) VALUES (?, ?, ?, ?)', user.id, 'password_reset', tokenHash, futureDate(60));
+    await db.run('INSERT INTO auth_tokens (user_id, type, token, expires_at) VALUES (?, ?, ?, ?)', user.id, 'password_reset', tokenHash, futureDate(60));
     const sendResult = await email.sendPasswordReset(user, token);
     res.json(emailResponse(sendResult, token));
   });
@@ -95,7 +131,7 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
   router.post('/email-verification/request', authRequired, async (req, res) => {
     const token = createToken();
     const tokenHash = hashToken(token);
-    db.run('INSERT INTO auth_tokens (user_id, type, token, expires_at) VALUES (?, ?, ?, ?)', req.user.id, 'email_verify', tokenHash, futureDate(24 * 60));
+    await db.run('INSERT INTO auth_tokens (user_id, type, token, expires_at) VALUES (?, ?, ?, ?)', req.user.id, 'email_verify', tokenHash, futureDate(24 * 60));
     const sendResult = await email.sendEmailVerification(req.user, token);
     res.json(emailResponse(sendResult, token));
   });
@@ -110,10 +146,10 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
     await db.run('UPDATE users SET email_verified = 1 WHERE id = ?', token.user_id);
     await db.run('UPDATE auth_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?', token.id);
     const user = await db.get('SELECT * FROM users WHERE id = ?', token.user_id);
-    res.json({ ok: true, user: ownUser(user) });
+    res.json({ ok: true, user: await ownMember(db, user) });
   });
 
-  router.get('/session', authRequired, (req, res) => res.json({ user: ownUser(req.user) }));
+  router.get('/session', authRequired, async (req, res) => res.json({ user: await ownMember(db, req.user) }));
 
   // ── Change password (authenticated) ──
 
@@ -127,6 +163,38 @@ export function createAuthRouter({ db, jwtSecret, config, email }) {
     }
     const passwordHash = await bcrypt.hash(new_password, 12);
     await db.run('UPDATE users SET password_hash = ? WHERE id = ?', passwordHash, user.id);
+    res.json({ ok: true });
+  });
+
+  router.post('/2fa/setup', authRequired, async (req, res) => {
+    const current = await db.get('SELECT two_factor_enabled FROM users WHERE id = ?', req.user.id);
+    if (current?.two_factor_enabled) return res.status(409).json({ error: 'Disable two-factor authentication before setting up a new authenticator' });
+    const secret = createTotpSecret();
+    await db.run('UPDATE users SET mfa_secret = ?, two_factor_enabled = 0 WHERE id = ?', encryptSensitive(secret, config.dataEncryptionKey), req.user.id);
+    res.json({ secret, otpauth_uri: totpUri(secret, req.user.username) });
+  });
+
+  router.post('/2fa/confirm', authRequired, async (req, res) => {
+    const parsed = mfaCodeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const user = await db.get('SELECT * FROM users WHERE id = ?', req.user.id);
+    if (!user.mfa_secret) return res.status(400).json({ error: 'Start two-factor setup first' });
+    const secret = decryptSensitive(user.mfa_secret, config.dataEncryptionKey);
+    if (!verifyTotp(secret, parsed.data.code)) return res.status(400).json({ error: 'Invalid authenticator code' });
+    await db.run('UPDATE users SET two_factor_enabled = 1 WHERE id = ?', user.id);
+    const updated = await db.get('SELECT * FROM users WHERE id = ?', user.id);
+    res.json({ ok: true, user: await ownMember(db, updated) });
+  });
+
+  router.post('/2fa/disable', authRequired, async (req, res) => {
+    const parsed = disableMfaSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const user = await db.get('SELECT * FROM users WHERE id = ?', req.user.id);
+    if (!(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'Password is incorrect' });
+    if (!user.mfa_secret || !verifyTotp(decryptSensitive(user.mfa_secret, config.dataEncryptionKey), parsed.data.code)) {
+      return res.status(400).json({ error: 'Invalid authenticator code' });
+    }
+    await db.run('UPDATE users SET two_factor_enabled = 0, mfa_secret = NULL WHERE id = ?', user.id);
     res.json({ ok: true });
   });
 

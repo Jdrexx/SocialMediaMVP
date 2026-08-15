@@ -33,6 +33,17 @@ export function authRequired(req, res, next) {
   next();
 }
 
+export function memberRequired(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (req.user.is_suspended) return res.status(403).json({ error: 'Account suspended' });
+  if (!req.user.onboarding_complete) return res.status(403).json({ error: 'Complete MySazz onboarding before using member features', code: 'ONBOARDING_REQUIRED' });
+  const requireVerification = req.app.locals.context?.config?.requireEmailVerification;
+  if (requireVerification && !req.user.email_verified) {
+    return res.status(403).json({ error: 'Verify your email before using member features', code: 'EMAIL_VERIFICATION_REQUIRED' });
+  }
+  next();
+}
+
 export function adminRequired(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'Authentication required' });
   if (!req.user.is_admin) return res.status(403).json({ error: 'Admin access required' });
@@ -54,10 +65,8 @@ export function csrfProtection(req, res, next) {
 }
 
 export function uploadsAuth(req, res, next) {
-  // Dev-mode: allow access for local testing convenience
-  // Production: require valid session
-  if (!req.app.locals.context?.config?.isProduction) return next();
   if (!req.user) return res.status(401).json({ error: 'Authentication required to access uploads' });
+  res.setHeader('Cache-Control', 'private, max-age=3600');
   next();
 }
 
