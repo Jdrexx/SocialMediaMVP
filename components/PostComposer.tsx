@@ -29,10 +29,11 @@ export default function PostComposer({ onPostCreated, posts }) {
 
   return (
     <section className="card composer">
-      <h2>Create post</h2>
+      <p className="eyebrow">Your voice matters</p>
+      <h2>Share with the community</h2>
       <form onSubmit={createPost}>
         <textarea
-          placeholder="What's happening?"
+          placeholder="Share a thought, milestone, question, or part of your story…"
           value={postBody}
           onChange={(e) => setPostBody(e.target.value)}
         />
@@ -42,7 +43,7 @@ export default function PostComposer({ onPostCreated, posts }) {
           onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
         />
         {media && <p className="status">Attached {media.original_name}</p>}
-        <button>Publish</button>
+        <button>Share post</button>
       </form>
     </section>
   );

@@ -113,26 +113,40 @@ export default function Home() {
   return (
     <main className="shell">
       <section className="hero">
-        <div>
-          <p className="eyebrow">Person-to-person mental health community</p>
-          <h1>MySazz</h1>
-          <p>Your place to share your story, build genuine connections, and find support without stigma or judgment.</p>
-        </div>
-        {user ? (
-          <div className="profileCard">
-            <Avatar user={user} size={64} />
-            <strong>@{user.username}</strong>
-            <span>{unreadCount} unread notifications</span>
-            {user.is_admin && <a href="/admin" className="secondaryButton" style={{ textAlign: 'center', display: 'block', textDecoration: 'none' }}>Admin Panel</a>}
-            <button type="button" className="secondaryButton" onClick={logout}>Logout</button>
+        <div className="heroCopy">
+          <p className="eyebrow">Your story. Your connections. Your next chapter.</p>
+          <h1>A place to move forward—together.</h1>
+          <p className="heroLead">Meet adults who understand that lived experience is part of your story, not the whole of who you are.</p>
+          <div className="heroPromises" aria-label="MySazz community principles">
+            <span>Private by choice</span>
+            <span>Mutual connections</span>
+            <span>Built without judgment</span>
           </div>
-        ) : null}
+          {!user && <a className="primaryLink" href="#member-access">Join the community</a>}
+        </div>
+        <figure className="heroVisual">
+          <img src="/brand/mysazz-community-hero.webp" alt="Four adults gathered around a table in a welcoming community space" />
+          <figcaption>Connection begins with being seen as a whole person.</figcaption>
+        </figure>
       </section>
+
+      {user && (
+        <section className="memberBar" aria-label="Signed-in member controls">
+          <div className="memberBarIdentity">
+            <Avatar user={user} size={48} />
+            <span><strong>Welcome back, @{user.username}</strong><small>{unreadCount} unread notifications</small></span>
+          </div>
+          <div className="memberBarActions">
+            {user.is_admin && <a href="/admin" className="secondaryButton">Admin panel</a>}
+            <button type="button" className="secondaryButton" onClick={logout}>Log out</button>
+          </div>
+        </section>
+      )}
 
       <NavLinks />
 
       {!signedIn ? (
-        <AuthForm onLogin={handleLogin} />
+        <div id="member-access"><AuthForm onLogin={handleLogin} /></div>
       ) : !user.onboarding_complete ? (
         <MemberOnboarding onComplete={(completedUser) => { setUser(completedUser); loadFeed().catch(() => null); }} />
       ) : (

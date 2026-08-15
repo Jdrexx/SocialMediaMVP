@@ -86,8 +86,13 @@ export default function AuthForm({ onLogin }) {
 
   return (
     <section className="card authCard">
+      <div className="authIntro">
+        <p className="eyebrow">Member access</p>
+        <h2>{mode === 'login' ? 'Welcome back' : 'Bring your whole story'}</h2>
+        <p>{mode === 'login' ? 'Sign in to reconnect with your MySazz community.' : 'Build friendships and peer connections at your pace, with privacy choices that stay in your hands.'}</p>
+      </div>
       <div className="tabs">
-        <button type="button" onClick={() => changeMode('login')} className={mode === 'login' ? 'active' : ''}>Login</button>
+        <button type="button" onClick={() => changeMode('login')} className={mode === 'login' ? 'active' : ''}>Log in</button>
         <button type="button" onClick={() => changeMode('register')} className={mode === 'register' ? 'active' : ''}>Join MySazz</button>
       </div>
       <form onSubmit={submitAuth} className="gridForm">
@@ -159,7 +164,7 @@ export default function AuthForm({ onLogin }) {
             </div>
           </div>
         )}
-        <button>{mode === 'register' ? 'Create MySazz account' : mfaRequired ? 'Verify and login' : 'Login'}</button>
+        <button>{mode === 'register' ? 'Create MySazz account' : mfaRequired ? 'Verify and log in' : 'Log in'}</button>
       </form>
       <p className="status" role="status">{status}</p>
     </section>
